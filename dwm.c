@@ -256,6 +256,8 @@ static void tile(Monitor *m);
 static void togglebar(const Arg *arg);
 static void togglefakefullscreen(const Arg *arg);
 static void togglefloating(const Arg *arg);
+static void togglefullscreen(const Arg *arg);
+static void togglelayout(const Arg *arg);
 static void togglescratch(const Arg *arg);
 static void toggletag(const Arg *arg);
 static void toggleview(const Arg *arg);
@@ -2157,6 +2159,33 @@ togglefloating(const Arg *arg)
 		resize(selmon->sel, selmon->sel->x, selmon->sel->y,
 			selmon->sel->w, selmon->sel->h, 0);
 	arrange(selmon);
+}
+
+void
+togglefullscreen(const Arg *arg)
+{
+	Client *c = selmon->sel;
+
+	if (!c)
+		return;
+	if (c->fakefullscreen == 1) {
+		c->fakefullscreen = 0;
+		if (c->isfullscreen) {
+			c->isfullscreen = 0;
+			setfullscreen(c, 1);
+			return;
+		}
+	}
+	setfullscreen(c, !c->isfullscreen);
+}
+
+void
+togglelayout(const Arg *arg)
+{
+	if (selmon->lt[selmon->sellt] == (Layout *)arg->v)
+		setlayout(&((Arg){ .v = &layouts[0] }));
+	else
+		setlayout(arg);
 }
 
 void
