@@ -55,9 +55,8 @@ static const Layout layouts[] = {
 };
 
 /* key definitions */
-/* Hyprland 占用 Super，Xephyr 测试先用 Alt；定稿后改为 Mod4Mask */
-/* #define MODKEY Mod4Mask */
-#define MODKEY Mod1Mask
+/* MacBook / 纯 X11：Super；与 Hyprland 同机时勿同时抢 Mod4 */
+#define MODKEY Mod4Mask
 #define TAGKEYS(KEY,TAG) \
 	{ MODKEY,                       KEY,      view,           {.ui = 1 << TAG} }, \
 	{ MODKEY|ControlMask,           KEY,      toggleview,     {.ui = 1 << TAG} }, \
