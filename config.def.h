@@ -20,7 +20,7 @@ static const char col_gray2[]       = "#3c3836"; /* border norm */
 static const char col_gray3[]       = "#a89984"; /* fg muted */
 static const char col_gray4[]       = "#ebdbb2"; /* fg */
 static const char col_cyan[]        = "#458588"; /* sel bg */
-static const char col_border[]      = "#fabd2f"; /* 选中窗口边框 */
+static const char col_border[]      = "#458588"; /* 选中窗口边框，与 sel 栏同色 */
 static const char *colors[][3]      = {
 	/*               fg         bg         border   */
 	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
