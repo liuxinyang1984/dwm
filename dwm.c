@@ -569,25 +569,31 @@ buttonpress(XEvent *e)
 		focus(NULL);
 	}
 	if (ev->window == selmon->barwin) {
-		i = x = 0;
+		i = 0;
+		x = (archicon && archicon[0] != '\0') ? TEXTW(archicon) : 0;
 		unsigned int occ = 0;
 		for(c = m->clients; c; c=c->next)
 			occ |= c->tags == TAGMASK ? 0 : c->tags;
-		do {
-			/* Do not reserve space for vacant tags */
-			if (!(occ & 1 << i || m->tagset[m->seltags] & 1 << i))
-				continue;
-			x += TEXTW(tags[i]);
-		} while (ev->x >= x && ++i < LENGTH(tags));
-		if (i < LENGTH(tags)) {
-			click = ClkTagBar;
-			arg.ui = 1 << i;
-		} else if (ev->x < x + TEXTW(selmon->ltsymbol))
-			click = ClkLtSymbol;
-		else if (ev->x > selmon->ww - status2dtextwidth(stext) - getsystraywidth())
-			click = ClkStatusText;
-		else
-			click = ClkWinTitle;
+		if (archicon && archicon[0] != '\0' && ev->x < x) {
+			/* logo：不抢 tag / layout 点击 */
+			click = ClkRootWin;
+		} else {
+			do {
+				/* Do not reserve space for vacant tags */
+				if (!(occ & 1 << i || m->tagset[m->seltags] & 1 << i))
+					continue;
+				x += TEXTW(tags[i]);
+			} while (ev->x >= x && ++i < LENGTH(tags));
+			if (i < LENGTH(tags)) {
+				click = ClkTagBar;
+				arg.ui = 1 << i;
+			} else if (ev->x < x + TEXTW(selmon->ltsymbol))
+				click = ClkLtSymbol;
+			else if (ev->x > selmon->ww - status2dtextwidth(stext) - getsystraywidth())
+				click = ClkStatusText;
+			else
+				click = ClkWinTitle;
+		}
 	} else if ((c = wintoclient(ev->window))) {
 		focus(c);
 		restack(selmon);
@@ -1092,6 +1098,12 @@ drawbar(Monitor *m)
 			urg |= c->tags;
 	}
 	x = 0;
+	if (archicon && archicon[0] != '\0') {
+		w = TEXTW(archicon);
+		drw_setscheme(drw, scheme[SchemeNorm]);
+		drw_text(drw, x, 0, w, bh, lrpad / 2, archicon, 0);
+		x += w;
+	}
 	for (i = 0; i < LENGTH(tags); i++) {
 		/* Do not draw vacant tags */
 		if(!(occ & 1 << i || m->tagset[m->seltags] & 1 << i))
@@ -2059,7 +2071,7 @@ setup(void)
 	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
 		die("no fonts could be loaded.");
 	lrpad = drw->fonts->h;
-	bh = drw->fonts->h + 2;
+	bh = barheight ? barheight : drw->fonts->h + 2;
 	updategeom();
 	/* init atoms */
 	utf8string = XInternAtom(dpy, "UTF8_STRING", False);

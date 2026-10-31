@@ -5,30 +5,35 @@ static const unsigned int borderpx  = 5;        /* border pixel of windows */
 static const unsigned int gappx     = 5;        /* gaps between windows */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const unsigned int systraypinning = 0;   /* 0: sloppy systray follows selected monitor, >0: pin systray to monitor X */
-static const unsigned int systrayonleft = 0;    /* 0: systray in the right corner, >0: systray on left of status text */
+static const unsigned int systrayonleft = 1;    /* 0: systray in the right corner, >0: systray on left of status text */
 static const unsigned int systrayspacing = 2;   /* systray spacing */
 static const int systraypinningfailfirst = 1;   /* 1: if pinning fails, display systray on the first monitor, False: display systray on the last monitor */
 static const int showsystray        = 1;        /* 0 means no systray */
 static const int swallowfloating    = 0;        /* 1 means swallow floating windows by default */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
-static const char *fonts[]          = { "monospace:size=16" };
-static const char dmenufont[]       = "monospace:size=16";
+/* 0 = 跟字体；>0 固定栏高(px)。字号 12 时约等于原 size=16 栏高 */
+static const unsigned int barheight = 22;
+static const char *fonts[]          = { "Maple Mono NL NF:size=12" };
+static const char dmenufont[]       = "Maple Mono NL NF:size=12";
 /* Gruvbox Dark — 与 st / neovim 对齐 */
 static const char col_gray1[]       = "#282828"; /* bg */
 static const char col_gray2[]       = "#3c3836"; /* border norm */
 static const char col_gray3[]       = "#a89984"; /* fg muted */
 static const char col_gray4[]       = "#ebdbb2"; /* fg */
-static const char col_cyan[]        = "#458588"; /* sel bg */
-static const char col_border[]      = "#458588"; /* 选中窗口边框，与 sel 栏同色 */
+static const char col_cyan[]        = "#458588"; /* dmenu sel bg */
+static const char col_sel_fg[]      = "#fabd2f"; /* 选中 tag/标题字：Gruvbox 亮黄 */
+static const char col_border[]      = "#458588"; /* 选中窗口边框 */
 static const char *colors[][3]      = {
 	/*               fg         bg         border   */
 	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
-	[SchemeSel]  = { col_gray4, col_cyan,  col_border },
+	[SchemeSel]  = { col_sel_fg, col_gray1, col_border },
 };
 
 /* tagging */
-static const char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+/* 栏最左 Arch 图标（Nerd Font nf-linux-archlinux）；空串 "" 关闭 */
+static const char *archicon = "";
+static const char *tags[] = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX" };
 
 static const Rule rules[] = {
 	/* xprop(1):
@@ -51,8 +56,8 @@ static const int refreshrate = 120;  /* refresh rate (per second) for client mov
 
 static const Layout layouts[] = {
 	/* symbol     arrange function */
-	{ "[]=",      tile },    /* first entry is default */
-	{ "><>",      NULL },    /* no layout function means floating behavior */
+	{ "[T]",      tile },    /* first entry is default */
+	{ "[F]",      NULL },    /* no layout function means floating behavior */
 	{ "[M]",      monocle },
 };
 
@@ -75,6 +80,8 @@ static const char *termcmd[]  = { "st", NULL };
 static const char scratchpadname[] = "scratchpad";
 static const char *scratchpadcmd[] = { "st", "-t", scratchpadname, "-g", "120x34", NULL };
 static const char *xkillcmd[] = { "xkill", NULL };
+/* 剪贴板历史：对齐本机 Hypr Super+V（cliphist+wofi）→ X11 clipmenu+dmenu */
+static const char *clipmenucmd[] = { "dmenu-clip", NULL };
 
 #include <X11/XF86keysym.h>
 #include "movestack.c"
@@ -91,6 +98,7 @@ static const Key keys[] = {
 	{ 0, XF86XK_KbdBrightnessUp,    spawn, SHCMD("brightnessctl -d smc::kbd_backlight set 5%+") },
 	*/
 	{ MODKEY,                       XK_space,  spawn,          {.v = dmenucmd } },
+	{ MODKEY,                       XK_v,      spawn,          {.v = clipmenucmd } }, /* 剪贴板历史 */
 	{ MODKEY,                       XK_Return, spawn,          {.v = termcmd } },
 	{ MODKEY,                       XK_grave,  togglescratch,  {.v = scratchpadcmd } },
 	{ MODKEY,                       XK_b,      togglebar,      {0} },
