@@ -75,7 +75,8 @@ static const Layout layouts[] = {
 
 /* commands */
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
-static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", "-bw", "5", "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", col_cyan, "-sf", col_gray4, NULL };
+/* -nb/-nf 列表；-sb/-sf 选中（黄）。输入行色在 dmenu SchemePrompt，不受这两对覆盖 */
+static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", "-bw", "5", "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", "#d79921", "-sf", col_gray1, NULL };
 static const char *termcmd[]  = { "st", NULL };
 static const char scratchpadname[] = "scratchpad";
 static const char *scratchpadcmd[] = { "st", "-t", scratchpadname, "-g", "120x34", NULL };
