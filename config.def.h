@@ -86,6 +86,10 @@ static const Key keys[] = {
 	{ 0, XF86XK_AudioRaiseVolume,   spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
 	{ 0, XF86XK_MonBrightnessDown,  spawn, SHCMD("brightnessctl set 5%-") },
 	{ 0, XF86XK_MonBrightnessUp,    spawn, SHCMD("brightnessctl set 5%+") },
+	/* Apple 键盘背光（机型相关；需要时取消注释并重编 dwm）
+	{ 0, XF86XK_KbdBrightnessDown,  spawn, SHCMD("brightnessctl -d smc::kbd_backlight set 5%-") },
+	{ 0, XF86XK_KbdBrightnessUp,    spawn, SHCMD("brightnessctl -d smc::kbd_backlight set 5%+") },
+	*/
 	{ MODKEY,                       XK_space,  spawn,          {.v = dmenucmd } },
 	{ MODKEY,                       XK_Return, spawn,          {.v = termcmd } },
 	{ MODKEY,                       XK_grave,  togglescratch,  {.v = scratchpadcmd } },
