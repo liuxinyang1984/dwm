@@ -21,13 +21,15 @@ static const char col_gray1[]       = "#282828"; /* bg */
 static const char col_gray2[]       = "#3c3836"; /* border norm */
 static const char col_gray3[]       = "#a89984"; /* fg muted */
 static const char col_gray4[]       = "#ebdbb2"; /* fg */
-static const char col_cyan[]        = "#458588"; /* dmenu sel bg */
+static const char col_cyan[]        = "#458588"; /* dmenu sel bg / 边框 */
+static const char col_arch[]        = "#7daea3"; /* Arch 图标底：Gruvbox Material blue */
 static const char col_sel_fg[]      = "#fabd2f"; /* 选中 tag/标题字：Gruvbox 亮黄 */
 static const char col_border[]      = "#458588"; /* 选中窗口边框 */
 static const char *colors[][3]      = {
 	/*               fg         bg         border   */
 	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
 	[SchemeSel]  = { col_sel_fg, col_gray1, col_border },
+	[SchemeArch] = { col_gray1, col_arch,  col_gray2 }, /* 栏左 Arch：深字 + Material 蓝底 */
 };
 
 /* tagging */

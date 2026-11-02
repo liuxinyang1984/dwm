@@ -78,7 +78,7 @@
 
 /* enums */
 enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
-enum { SchemeNorm, SchemeSel }; /* color schemes */
+enum { SchemeNorm, SchemeSel, SchemeArch }; /* color schemes */
 enum { NetSupported, NetWMName, NetWMState, NetWMCheck,
        NetSystemTray, NetSystemTrayOP, NetSystemTrayOrientation, NetSystemTrayOrientationHorz,
        NetWMFullscreen, NetActiveWindow, NetWMWindowType,
@@ -1100,7 +1100,7 @@ drawbar(Monitor *m)
 	x = 0;
 	if (archicon && archicon[0] != '\0') {
 		w = TEXTW(archicon);
-		drw_setscheme(drw, scheme[SchemeNorm]);
+		drw_setscheme(drw, scheme[SchemeArch]);
 		drw_text(drw, x, 0, w, bh, lrpad / 2, archicon, 0);
 		x += w;
 	}
