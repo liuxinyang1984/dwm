@@ -124,6 +124,7 @@ struct Client {
 	Client *swallowing;
 	Monitor *mon;
 	Window win;
+	Window dec; /* CDE-style bevel decoration (sibling under win) */
 };
 
 typedef struct {
@@ -196,8 +197,13 @@ static void clientmessage(XEvent *e);
 static void configure(Client *c);
 static void configurenotify(XEvent *e);
 static void configurerequest(XEvent *e);
+static void createdec(Client *c);
 static Monitor *createmon(void);
 static void orientlayout(Monitor *m);
+static void destroydec(Client *c);
+static void drawdec(Client *c, int focused);
+static void redrawdecs(Monitor *m);
+static void stackdec(Client *c);
 static void destroynotify(XEvent *e);
 static void detach(Client *c);
 static void detachstack(Client *c);
@@ -285,6 +291,7 @@ static void unmapnotify(XEvent *e);
 static void updatebarpos(Monitor *m);
 static void updatebars(void);
 static void updateclientlist(void);
+static void updatedec(Client *c);
 static int updategeom(void);
 static void updatenumlockmask(void);
 static void updatesizehints(Client *c);
@@ -346,6 +353,7 @@ static int restart = 0;
 static int running = 1;
 static Cur *cursor[CurLast];
 static Clr **scheme;
+static Clr borderhi, borderhin, bordersh, bordershn; /* CDE bevel hi/sh (sel/norm) */
 static Display *dpy;
 static Drw *drw;
 static Monitor *mons, *selmon;
@@ -543,6 +551,7 @@ swallow(Client *p, Client *c)
 
 	setclientstate(c, WithdrawnState);
 	XUnmapWindow(dpy, p->win);
+	destroydec(c);
 
 	p->swallowing = c;
 	c->mon = p->mon;
@@ -551,7 +560,8 @@ swallow(Client *p, Client *c)
 	p->win = c->win;
 	c->win = w;
 	updatetitle(p);
-	XMoveResizeWindow(dpy, p->win, p->x, p->y, p->w, p->h);
+	XMoveResizeWindow(dpy, p->win, p->x + p->bw, p->y + p->bw, p->w, p->h);
+	updatedec(p);
 	arrange(p->mon);
 	configure(p);
 	updateclientlist();
@@ -560,6 +570,8 @@ swallow(Client *p, Client *c)
 void
 unswallow(Client *c)
 {
+	if (c->swallowing)
+		destroydec(c->swallowing);
 	c->win = c->swallowing->win;
 
 	free(c->swallowing);
@@ -570,7 +582,8 @@ unswallow(Client *c)
 	updatetitle(c);
 	arrange(c->mon);
 	XMapWindow(dpy, c->win);
-	XMoveResizeWindow(dpy, c->win, c->x, c->y, c->w, c->h);
+	XMoveResizeWindow(dpy, c->win, c->x + c->bw, c->y + c->bw, c->w, c->h);
+	updatedec(c);
 	setclientstate(c, NormalState);
 	focus(NULL);
 	arrange(c->mon);
@@ -669,6 +682,10 @@ cleanup(void)
 	for (i = 0; i < LENGTH(colors) + 1; i++)
 		drw_scm_free(drw, scheme[i], 3);
 	free(scheme);
+	drw_clr_free(drw, &borderhi);
+	drw_clr_free(drw, &borderhin);
+	drw_clr_free(drw, &bordersh);
+	drw_clr_free(drw, &bordershn);
 	XDestroyWindow(dpy, wmcheckwin);
 	drw_free(drw);
 	XSync(dpy, False);
@@ -769,14 +786,266 @@ configure(Client *c)
 	ce.display = dpy;
 	ce.event = c->win;
 	ce.window = c->win;
-	ce.x = c->x;
-	ce.y = c->y;
+	/* actual client geometry: inset by CDE bevel, no X border */
+	ce.x = c->x + c->bw;
+	ce.y = c->y + c->bw;
 	ce.width = c->w;
 	ce.height = c->h;
-	ce.border_width = c->bw;
+	ce.border_width = 0;
 	ce.above = None;
 	ce.override_redirect = False;
 	XSendEvent(dpy, c->win, False, StructureNotifyMask, (XEvent *)&ce);
+}
+
+void
+stackdec(Client *c)
+{
+	XWindowChanges wc;
+
+	/* XMapWindow raises dec; keep it strictly under the client */
+	if (!c || !c->dec)
+		return;
+	wc.stack_mode = Below;
+	wc.sibling = c->win;
+	XConfigureWindow(dpy, c->dec, CWSibling|CWStackMode, &wc);
+}
+
+void
+redrawdecs(Monitor *m)
+{
+	Client *c;
+
+	if (!m)
+		return;
+	for (c = m->clients; c; c = c->next)
+		if (ISVISIBLE(c) && c->dec && c->bw > 0) {
+			stackdec(c);
+			drawdec(c, c == selmon->sel);
+		}
+}
+
+void
+createdec(Client *c)
+{
+	XSetWindowAttributes wa = {
+		.override_redirect = True,
+		.background_pixmap = None, /* center must not paint over client */
+		.bit_gravity = ForgetGravity, /* resize 时丢弃旧像素，避免残影 */
+		.event_mask = ExposureMask|EnterWindowMask|ButtonPressMask,
+	};
+
+	if (c->dec || c->bw <= 0)
+		return;
+	c->dec = XCreateWindow(dpy, root, c->x, c->y,
+		MAX(1, (unsigned int)(c->w + 2 * c->bw)),
+		MAX(1, (unsigned int)(c->h + 2 * c->bw)),
+		0, DefaultDepth(dpy, screen), CopyFromParent,
+		DefaultVisual(dpy, screen),
+		CWOverrideRedirect|CWBackPixmap|CWBitGravity|CWEventMask, &wa);
+	XDefineCursor(dpy, c->dec, cursor[CurNormal]->cursor);
+	XMapWindow(dpy, c->dec);
+	stackdec(c);
+	drawdec(c, c == selmon->sel);
+}
+
+void
+destroydec(Client *c)
+{
+	if (!c || !c->dec)
+		return;
+	XUnmapWindow(dpy, c->dec);
+	XDestroyWindow(dpy, c->dec);
+	c->dec = None;
+}
+
+/* FVWM borders.c: do_relieve_rectangle (ROTATION_0, alternate=0) */
+static void
+relieve(Drawable d, GC rgc, GC sgc, int x, int y, int w, int h, int lw)
+{
+	int i, maxw, maxh;
+
+	if (w <= 0 || h <= 0 || lw <= 0)
+		return;
+	maxw = (w + 1) / 2;
+	maxh = (h + 1) / 2;
+	if (maxw > lw)
+		maxw = lw;
+	if (maxh > lw)
+		maxh = lw;
+	for (i = 0; i < maxw; i++) {
+		XDrawLine(dpy, d, rgc, x + i, y + i, x + i, y + h - i);
+		XDrawLine(dpy, d, sgc, x + w - i, y + h - i, x + w - i, y + i + 1);
+	}
+	for (i = 0; i < maxh; i++) {
+		XDrawLine(dpy, d, rgc, x + w - i, y + i, x + i + 1, y + i);
+		XDrawLine(dpy, d, sgc, x + i + 1, y + h - i, x + w - i - 1, y + h - i);
+	}
+}
+
+void
+drawdec(Client *c, int focused)
+{
+	int bw, W, H, cx, cy, o, mlen, trim;
+	int w_hiout, w_shin, w_c, sum;
+	int has_x, has_y;
+	unsigned long face, hi, sh;
+	GC gc, rgc, sgc;
+	XGCValues gcv;
+
+	if (!c || !c->dec || c->bw <= 0)
+		return;
+
+	bw = c->bw;
+	W = c->w + 2 * bw;
+	H = c->h + 2 * bw;
+	if (W <= 0 || H <= 0)
+		return;
+
+	/*
+	 * FVWM MWMBorder layout (borders.c border_fetch_mwm_layout):
+	 *   left/top  outside→in: H H C…C S
+	 *   right/bot outside→in: S S C…C H
+	 * then trim_border_layout if bw too thin.
+	 */
+	w_hiout = 2;
+	w_shin = 1;
+	sum = 3;
+	trim = sum - bw + 1;
+	if (bw == 2)
+		trim--;
+	if (trim < 0)
+		trim = 0;
+	for (; trim > 0; trim--) {
+		if (w_hiout > 1)
+			w_hiout--;
+		else if (w_shin > 0)
+			w_shin--;
+		else if (w_hiout > 0)
+			w_hiout--;
+		sum--;
+	}
+	w_c = bw - sum;
+	if (w_c < 0)
+		w_c = 0;
+
+	/* FVWM: corner_width = title_thickness + boundary；此处 = handlewidth */
+	cx = cy = (int)handlewidth;
+	if (cx < bw)
+		cx = bw;
+	if (cy < bw)
+		cy = bw;
+	has_x = has_y = 1;
+	if (W < 2 * cx + 4) {
+		cx = W / 3;
+		has_y = 0;
+	}
+	if (H < 2 * cy + 4) {
+		cy = H / 3;
+		has_x = 0;
+	}
+	if (cx <= bw)
+		has_y = 0;
+	if (cy <= bw)
+		has_x = 0;
+
+	/*
+	 * FVWM 源码 marks.length = bw - inset（避开 shin），但那样暗槽
+	 * 在底/右侧到不了最内缘的亮边，角分割发糊。这里贯穿整段边厚，
+	 * 让 暗亮 都顶到内外两头（暗边切进底/右内缘亮 shin 才看得见）。
+	 */
+	mlen = bw;
+	if (mlen < 1)
+		has_x = has_y = 0;
+
+	face = scheme[focused ? SchemeSel : SchemeNorm][ColBorder].pixel;
+	hi = (focused ? borderhi : borderhin).pixel;
+	sh = (focused ? bordersh : bordershn).pixel;
+
+	gcv.graphics_exposures = False;
+	gc = XCreateGC(dpy, c->dec, GCGraphicsExposures, &gcv);
+	rgc = XCreateGC(dpy, c->dec, GCGraphicsExposures, &gcv);
+	sgc = XCreateGC(dpy, c->dec, GCGraphicsExposures, &gcv);
+	XSetForeground(dpy, rgc, hi);
+	XSetForeground(dpy, sgc, sh);
+
+	/* 1) face 环（整圈连续，角与中段不断开） */
+	XSetForeground(dpy, gc, face);
+	XFillRectangle(dpy, c->dec, gc, 0, 0, W, bw);
+	XFillRectangle(dpy, c->dec, gc, 0, H - bw, W, bw);
+	XFillRectangle(dpy, c->dec, gc, 0, bw, bw, H - 2 * bw);
+	XFillRectangle(dpy, c->dec, gc, W - bw, bw, bw, H - 2 * bw);
+
+	/* 2) 外凸 w_hiout — 整窗 RelieveRectangle */
+	if (w_hiout > 0)
+		relieve(c->dec, rgc, sgc, 0, 0, W - 1, H - 1, w_hiout);
+
+	/* 3) 内凹 w_shin — 整窗，缩进 w_hiout + w_c（与 FVWM 层叠一致） */
+	if (w_shin > 0) {
+		o = w_hiout + w_c;
+		relieve(c->dec, sgc, rgc, o, o, W - 1 - 2 * o, H - 1 - 2 * o, w_shin);
+	}
+
+	/*
+	 * 4) 把手槽 — FVWM border_draw_part_marks：
+	 *    角|暗 亮|框 … 框|暗 亮|角（左→右 / 上→下）
+	 *    槽贯穿边厚 mlen=bw，内外两头都到齐。
+	 */
+	if (has_y) {
+		XSetForeground(dpy, gc, sh);
+		XDrawLine(dpy, c->dec, gc, cx - 1, 0, cx - 1, mlen - 1);
+		XDrawLine(dpy, c->dec, gc, W - cx - 1, 0, W - cx - 1, mlen - 1);
+		XSetForeground(dpy, gc, hi);
+		XDrawLine(dpy, c->dec, gc, cx, 0, cx, mlen - 1);
+		XDrawLine(dpy, c->dec, gc, W - cx, 0, W - cx, mlen - 1);
+		XSetForeground(dpy, gc, sh);
+		XDrawLine(dpy, c->dec, gc, cx - 1, H - mlen, cx - 1, H - 1);
+		XDrawLine(dpy, c->dec, gc, W - cx - 1, H - mlen, W - cx - 1, H - 1);
+		XSetForeground(dpy, gc, hi);
+		XDrawLine(dpy, c->dec, gc, cx, H - mlen, cx, H - 1);
+		XDrawLine(dpy, c->dec, gc, W - cx, H - mlen, W - cx, H - 1);
+	}
+	if (has_x) {
+		XSetForeground(dpy, gc, sh);
+		XDrawLine(dpy, c->dec, gc, 0, cy - 1, mlen - 1, cy - 1);
+		XDrawLine(dpy, c->dec, gc, 0, H - cy - 1, mlen - 1, H - cy - 1);
+		XSetForeground(dpy, gc, hi);
+		XDrawLine(dpy, c->dec, gc, 0, cy, mlen - 1, cy);
+		XDrawLine(dpy, c->dec, gc, 0, H - cy, mlen - 1, H - cy);
+		XSetForeground(dpy, gc, sh);
+		XDrawLine(dpy, c->dec, gc, W - mlen, cy - 1, W - 1, cy - 1);
+		XDrawLine(dpy, c->dec, gc, W - mlen, H - cy - 1, W - 1, H - cy - 1);
+		XSetForeground(dpy, gc, hi);
+		XDrawLine(dpy, c->dec, gc, W - mlen, cy, W - 1, cy);
+		XDrawLine(dpy, c->dec, gc, W - mlen, H - cy, W - 1, H - cy);
+	}
+
+	XFreeGC(dpy, gc);
+	XFreeGC(dpy, rgc);
+	XFreeGC(dpy, sgc);
+}
+
+void
+updatedec(Client *c)
+{
+	if (!c)
+		return;
+	if (c->bw <= 0) {
+		if (c->dec)
+			XUnmapWindow(dpy, c->dec);
+		return;
+	}
+	if (!c->dec) {
+		createdec(c);
+		return;
+	}
+	XMoveResizeWindow(dpy, c->dec, c->x, c->y,
+		MAX(1, (unsigned int)(c->w + 2 * c->bw)),
+		MAX(1, (unsigned int)(c->h + 2 * c->bw)));
+	XMapWindow(dpy, c->dec);
+	stackdec(c); /* MapWindow raises; pull back under client */
+	/* ForgetGravity generates Expose; paint immediately so layout changes don't lag */
+	XClearArea(dpy, c->dec, 0, 0, 0, 0, False);
+	drawdec(c, c == selmon->sel);
 }
 
 void
@@ -816,8 +1085,10 @@ configurerequest(XEvent *e)
 	XWindowChanges wc;
 
 	if ((c = wintoclient(ev->window))) {
-		if (ev->value_mask & CWBorderWidth)
-			c->bw = ev->border_width;
+		/* CDE dec owns the border; ignore client border_width */
+		if ((ev->value_mask & CWBorderWidth)
+		&& !(ev->value_mask & (CWX|CWY|CWWidth|CWHeight)))
+			configure(c);
 		else if (c->isfloating || !selmon->lt[selmon->sellt]->arrange) {
 			m = c->mon;
 			if (ev->value_mask & CWX) {
@@ -842,8 +1113,10 @@ configurerequest(XEvent *e)
 				c->y = m->my + (m->mh / 2 - HEIGHT(c) / 2); /* center in y direction */
 			if ((ev->value_mask & (CWX|CWY)) && !(ev->value_mask & (CWWidth|CWHeight)))
 				configure(c);
-			if (ISVISIBLE(c))
-				XMoveResizeWindow(dpy, c->win, c->x, c->y, c->w, c->h);
+			if (ISVISIBLE(c)) {
+				XMoveResizeWindow(dpy, c->win, c->x + c->bw, c->y + c->bw, c->w, c->h);
+				updatedec(c);
+			}
 		} else
 			configure(c);
 	} else {
@@ -1227,13 +1500,15 @@ void
 expose(XEvent *e)
 {
 	Monitor *m;
+	Client *c;
 	XExposeEvent *ev = &e->xexpose;
 
 	if (ev->count == 0 && (m = wintomon(ev->window))) {
 		drawbar(m);
 		if (m == selmon)
 			updatesystray();
-	}
+	} else if (ev->count == 0 && (c = wintoclient(ev->window)) && ev->window == c->dec)
+		drawdec(c, c == selmon->sel);
 }
 
 void
@@ -1251,7 +1526,6 @@ focus(Client *c)
 		detachstack(c);
 		attachstack(c);
 		grabbuttons(c, 1);
-		XSetWindowBorder(dpy, c->win, scheme[SchemeSel][ColBorder].pixel);
 		setfocus(c);
 	} else {
 		XSetInputFocus(dpy, root, RevertToPointerRoot, CurrentTime);
@@ -1273,6 +1547,7 @@ focus(Client *c)
 			}
 		}
 	}
+	redrawdecs(selmon); /* focus 色与几何一起刷，避免新窗口/切焦点残影 */
 	drawbars();
 }
 
@@ -1608,6 +1883,7 @@ manage(Window w, XWindowAttributes *wa)
 	c->x = MAX(c->x, c->mon->wx);
 	c->y = MAX(c->y, c->mon->wy);
 	c->bw = borderpx;
+	c->dec = None;
 
 	/* 新窗出现时收起浮动终端 dock；隐藏 tag 不动 */
 	selmon->tagset[selmon->seltags] &= ~FLOATDOCKBIT;
@@ -1619,9 +1895,8 @@ manage(Window w, XWindowAttributes *wa)
 		c->y = c->mon->wy + (c->mon->wh / 2 - HEIGHT(c) / 2);
 	}
 
-	wc.border_width = c->bw;
+	wc.border_width = 0;
 	XConfigureWindow(dpy, w, CWBorderWidth, &wc);
-	XSetWindowBorder(dpy, w, scheme[SchemeNorm][ColBorder].pixel);
 	configure(c); /* propagates border_width, if size doesn't change */
 	updatewindowtype(c);
 	updatesizehints(c);
@@ -1632,8 +1907,12 @@ manage(Window w, XWindowAttributes *wa)
 	grabbuttons(c, 0);
 	if (!c->isfloating)
 		c->isfloating = c->oldstate = trans != None || c->isfixed;
-	if (c->isfloating)
+	createdec(c);
+	if (c->isfloating) {
+		if (c->dec)
+			XRaiseWindow(dpy, c->dec);
 		XRaiseWindow(dpy, c->win);
+	}
 	attachbottom(c);
 	attachstack(c);
 	XChangeProperty(dpy, root, netatom[NetClientList], XA_WINDOW, 32, PropModeAppend,
@@ -1644,10 +1923,14 @@ manage(Window w, XWindowAttributes *wa)
 		unfocus(selmon->sel, 0);
 	c->mon->sel = c;
 	arrange(c->mon);
+	if (c->dec)
+		XMapWindow(dpy, c->dec);
 	XMapWindow(dpy, c->win);
+	stackdec(c);
 	if (term)
 		swallow(term, c);
 	focus(NULL);
+	redrawdecs(c->mon);
 }
 
 void
@@ -1882,13 +2165,19 @@ resizeclient(Client *c, int x, int y, int w, int h)
 {
 	XWindowChanges wc;
 
-	c->oldx = c->x; c->x = wc.x = x;
-	c->oldy = c->y; c->y = wc.y = y;
-	c->oldw = c->w; c->w = wc.width = w;
-	c->oldh = c->h; c->h = wc.height = h;
-	wc.border_width = c->bw;
+	c->oldx = c->x; c->x = x;
+	c->oldy = c->y; c->y = y;
+	c->oldw = c->w; c->w = w;
+	c->oldh = c->h; c->h = h;
+	/* client sits inside CDE bevel; X border unused */
+	wc.border_width = 0;
+	wc.x = c->x + c->bw;
+	wc.y = c->y + c->bw;
+	wc.width = c->w;
+	wc.height = c->h;
 	XConfigureWindow(dpy, c->win, CWX|CWY|CWWidth|CWHeight|CWBorderWidth, &wc);
 	configure(c);
+	updatedec(c);
 	if (c->fakefullscreen == 1)
 		XSync(dpy, True);
 	else
@@ -1975,17 +2264,25 @@ restack(Monitor *m)
 	drawbar(m);
 	if (!m->sel)
 		return;
-	if (m->sel->isfloating || !m->lt[m->sellt]->arrange)
+	if (m->sel->isfloating || !m->lt[m->sellt]->arrange) {
+		if (m->sel->dec)
+			XRaiseWindow(dpy, m->sel->dec);
 		XRaiseWindow(dpy, m->sel->win);
+	}
 	if (m->lt[m->sellt]->arrange) {
 		wc.stack_mode = Below;
 		wc.sibling = m->barwin;
 		for (c = m->stack; c; c = c->snext)
 			if (!c->isfloating && ISVISIBLE(c)) {
+				if (c->dec) {
+					XConfigureWindow(dpy, c->dec, CWSibling|CWStackMode, &wc);
+					wc.sibling = c->dec;
+				}
 				XConfigureWindow(dpy, c->win, CWSibling|CWStackMode, &wc);
 				wc.sibling = c->win;
 			}
 	}
+	redrawdecs(m);
 	XSync(dpy, False);
 	while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
@@ -2115,6 +2412,8 @@ setfullscreen(Client *c, int fullscreen)
 		c->bw = 0;
 		c->isfloating = 1;
 		resizeclient(c, c->mon->mx, c->mon->my, c->mon->mw, c->mon->mh);
+		if (c->dec)
+			XRaiseWindow(dpy, c->dec);
 		XRaiseWindow(dpy, c->win);
 	} else if (!fullscreen && c->isfullscreen){
 		XChangeProperty(dpy, c->win, netatom[NetWMState], XA_ATOM, 32,
@@ -2236,6 +2535,10 @@ setup(void)
 	scheme[LENGTH(colors)] = drw_scm_create(drw, colors[SchemeNorm], 3);
 	for (i = 0; i < LENGTH(colors); i++)
 		scheme[i] = drw_scm_create(drw, colors[i], 3);
+	drw_clr_create(drw, &borderhi, col_borderhi);
+	drw_clr_create(drw, &borderhin, col_borderhin);
+	drw_clr_create(drw, &bordersh, col_bordersh);
+	drw_clr_create(drw, &bordershn, col_bordershn);
 	/* init system tray */
 	updatesystray();
 	/* init bars */
@@ -2284,7 +2587,8 @@ showhide(Client *c)
 		return;
 	if (ISVISIBLE(c)) {
 		/* show clients top down */
-		XMoveWindow(dpy, c->win, c->x, c->y);
+		XMoveWindow(dpy, c->win, c->x + c->bw, c->y + c->bw);
+		updatedec(c);
 		if ((!c->mon->lt[c->mon->sellt]->arrange || c->isfloating) && !c->isfullscreen)
 			resize(c, c->x, c->y, c->w, c->h, 0);
 		showhide(c->snext);
@@ -2292,6 +2596,8 @@ showhide(Client *c)
 		/* hide clients bottom up */
 		showhide(c->snext);
 		XMoveWindow(dpy, c->win, WIDTH(c) * -2, c->y);
+		if (c->dec)
+			XMoveWindow(dpy, c->dec, WIDTH(c) * -2, c->y);
 	}
 }
 
@@ -2737,7 +3043,7 @@ unfocus(Client *c, int setfocus)
 	if (!c)
 		return;
 	grabbuttons(c, 0);
-	XSetWindowBorder(dpy, c->win, scheme[SchemeNorm][ColBorder].pixel);
+	drawdec(c, 0);
 	if (setfocus) {
 		XSetInputFocus(dpy, root, RevertToPointerRoot, CurrentTime);
 		XDeleteProperty(dpy, root, netatom[NetActiveWindow]);
@@ -2757,6 +3063,7 @@ unmanage(Client *c, int destroyed)
 
 	Client *s = swallowingclient(c->win);
 	if (s) {
+		destroydec(s->swallowing);
 		free(s->swallowing);
 		s->swallowing = NULL;
 		arrange(m);
@@ -2772,6 +3079,7 @@ unmanage(Client *c, int destroyed)
 		prevmaster = NULL;
 	if (c == prevslave)
 		prevslave = NULL;
+	destroydec(c);
 	if (!destroyed) {
 		wc.border_width = c->oldbw;
 		XGrabServer(dpy); /* avoid race conditions */
@@ -3344,7 +3652,7 @@ wintoclient(Window w)
 
 	for (m = mons; m; m = m->next)
 		for (c = m->clients; c; c = c->next)
-			if (c->win == w)
+			if (c->win == w || (c->dec && c->dec == w))
 				return c;
 	return NULL;
 }

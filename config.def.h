@@ -2,6 +2,8 @@
 
 /* appearance */
 static const unsigned int borderpx  = 5;        /* border pixel of windows */
+/* 角宽（沿边）= FVWM corner_width ≈ TitleHeight + BorderWidth（20+5） */
+static const unsigned int handlewidth = 25;
 static const unsigned int gappx     = 5;        /* gaps between windows */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const unsigned int systraypinning = 0;   /* 0: sloppy systray follows selected monitor, >0: pin systray to monitor X */
@@ -26,11 +28,21 @@ static const char col_gray4[]       = "#ebdbb2"; /* fg */
 static const char col_cyan[]        = "#458588"; /* dmenu sel bg / 边框 */
 static const char col_arch[]        = "#7daea3"; /* Arch 图标底：Gruvbox Material blue */
 static const char col_sel_fg[]      = "#fabd2f"; /* 选中 tag/标题字：Gruvbox 亮黄 */
-static const char col_border[]      = "#458588"; /* 选中窗口边框 */
+/*
+ * CDE/FVWM 边框色 — 对齐 ~/.fvwm/conf.d/10-colorsets.conf
+ * Colorset 3/4 face；hi/sh 与同文件菜单对 #007070 的显式值一致，
+ * 非激活按 Motif 常用算法从 face 推（+1/3 向白 / ×0.5）
+ */
+static const char col_cde_norm[]    = "#738373"; /* Colorset 3 bg */
+static const char col_cde_sel[]     = "#007070"; /* Colorset 4 bg */
+static const char col_borderhi[]    = "#40a0a0"; /* active hilight（同 Colorset 6/8） */
+static const char col_borderhin[]   = "#a1afa1"; /* inactive hilight */
+static const char col_bordersh[]    = "#004040"; /* active shadow（同 Colorset 6/8） */
+static const char col_bordershn[]   = "#393c39"; /* inactive shadow */
 static const char *colors[][3]      = {
 	/*               fg         bg         border   */
-	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
-	[SchemeSel]  = { col_sel_fg, col_gray1, col_border },
+	[SchemeNorm] = { col_gray3, col_gray1, col_cde_norm },
+	[SchemeSel]  = { col_sel_fg, col_gray1, col_cde_sel },
 	[SchemeArch] = { col_gray1, col_arch,  col_gray2 }, /* 栏左 Arch：深字 + Material 蓝底 */
 };
 
