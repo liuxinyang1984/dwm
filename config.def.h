@@ -2,6 +2,7 @@
 
 /* appearance */
 static const unsigned int borderpx  = 5;        /* border pixel of windows */
+static const unsigned int barborderpx = 5;      /* outer CDE frame around barwin (0 = off) */
 /* 角宽（沿边）= FVWM corner_width ≈ TitleHeight + BorderWidth（20+5） */
 static const unsigned int handlewidth = 25;
 static const unsigned int gappx     = 5;        /* gaps between windows */
