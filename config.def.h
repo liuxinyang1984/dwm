@@ -60,7 +60,8 @@ static const Rule rules[] = {
 	{ "Gimp",    NULL,     NULL,           0,         1,          0,           0,        -1 },
 	{ "Firefox", NULL,     NULL,           1 << 8,    0,          0,          -1,        -1 },
 	{ "St",      NULL,     NULL,           0,         0,          1,           0,        -1 },
-	{ "Rofi",    NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -normal-window */
+{ "Rofi",    NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -normal-window：吃 CDE dec */
+	{ "dmenu",   NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -wm：吃 CDE dec */
 	{ NULL,      NULL,     "Event Tester", 0,         0,          0,           1,        -1 }, /* xev */
 };
 
@@ -94,8 +95,8 @@ static const Layout layouts[] = {
 
 /* commands */
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
-/* -nb/-nf 列表；-sb/-sf 选中（黄）。输入行色在 dmenu SchemePrompt，不受这两对覆盖 */
-static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", "-bw", "5", "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", "#d79921", "-sf", col_gray1, NULL };
+/* -wm：交给 dwm 画 CDE 边框；-bw 0 避免与自绘框叠两层。输入行色在 SchemePrompt */
+static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", "-wm", "-bw", "0", "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", "#d79921", "-sf", col_gray1, NULL };
 static const char *termcmd[]  = { "st", NULL };
 /* Super+\：单实例浮动终端 dock（标题须与 floatdockname 一致） */
 static const char floatdockname[] = "backslash";
