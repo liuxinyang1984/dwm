@@ -160,6 +160,7 @@ struct Monitor {
 	Client *stack;
 	Monitor *next;
 	Window barwin;
+	Window bardec;        /* outer frame around barwin; None if barborderpx==0 */
 	const Layout *lt[2];
 	Pertag *pertag;
 };
@@ -209,8 +210,12 @@ static void detach(Client *c);
 static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
 static void drawbar(Monitor *m);
+static void drawbardec(Monitor *m);
 static void drawbars(void);
 static int drawstatusbar(Monitor *m, int bh, char *text);
+static unsigned int barw(Monitor *m);
+static unsigned int barinnerw(Monitor *m);
+static int barareaheight(void);
 static int status2dtextwidth(char *stext);
 static void enternotify(XEvent *e);
 static void expose(XEvent *e);
@@ -626,7 +631,7 @@ buttonpress(XEvent *e)
 				arg.ui = 1 << i;
 			} else if (ev->x < x + TEXTW(selmon->ltsymbol))
 				click = ClkLtSymbol;
-			else if (ev->x > selmon->ww - status2dtextwidth(stext) - getsystraywidth())
+			else if (ev->x > (int)barinnerw(selmon) - status2dtextwidth(stext))
 				click = ClkStatusText;
 			else
 				click = ClkWinTitle;
@@ -704,8 +709,15 @@ cleanupmon(Monitor *mon)
 		for (m = mons; m && m->next != mon; m = m->next);
 		m->next = mon->next;
 	}
-	XUnmapWindow(dpy, mon->barwin);
-	XDestroyWindow(dpy, mon->barwin);
+	if (mon->bardec) {
+		XUnmapWindow(dpy, mon->bardec);
+		XDestroyWindow(dpy, mon->bardec); /* destroys child barwin */
+		mon->bardec = mon->barwin = None;
+	} else if (mon->barwin) {
+		XUnmapWindow(dpy, mon->barwin);
+		XDestroyWindow(dpy, mon->barwin);
+		mon->barwin = None;
+	}
 	free(mon);
 }
 
@@ -1290,13 +1302,10 @@ status2dtextwidth(char *stext)
 int
 drawstatusbar(Monitor *m, int bh, char *stext)
 {
-	int ret, i, w, x, len, stw = 0;
+	int ret, i, w, x, len;
 	short isCode = 0;
 	char *text;
 	char *p;
-
-	if (showsystray && m == systraytomon(m) && !systrayonleft)
-		stw = getsystraywidth();
 
 	len = strlen(stext) + 1;
 	if (!(text = malloc(len)))
@@ -1329,8 +1338,12 @@ drawstatusbar(Monitor *m, int bh, char *stext)
 	text = p;
 
 	w += 2; /* 1px padding on both sides */
-	ret = m->ww - w;
-	x = m->ww - w - stw;
+	{
+		unsigned int cw = barinnerw(m);
+
+		ret = cw - w;
+		x = cw - w;
+	}
 
 	drw_setscheme(drw, scheme[LENGTH(colors)]);
 	drw->scheme[ColFg] = scheme[SchemeNorm][ColFg];
@@ -1397,27 +1410,128 @@ drawstatusbar(Monitor *m, int bh, char *stext)
 	return ret;
 }
 
+unsigned int
+barw(Monitor *m)
+{
+	unsigned int w = m->ww;
+
+	if (showsystray && m == systraytomon(m) && !systrayonleft)
+		w -= getsystraywidth();
+	return w;
+}
+
+/* content width inside barborderpx frame (frame itself stays within barw) */
+unsigned int
+barinnerw(Monitor *m)
+{
+	unsigned int w = barw(m);
+
+	if (barborderpx && w > 2 * barborderpx)
+		w -= 2 * barborderpx;
+	return w;
+}
+
+int
+barareaheight(void)
+{
+	return bh + 2 * (int)barborderpx;
+}
+
+void
+drawbardec(Monitor *m)
+{
+	int W, H, bb = (int)barborderpx;
+	int w_hiout, w_shin, w_c, sum, trim, o;
+	unsigned long face, hi, sh;
+	GC gc, rgc, sgc;
+	XGCValues gcv;
+
+	if (!m->showbar || !m->bardec || bb <= 0)
+		return;
+
+	/* outer frame width == barw; do not extend past monitor/tray strip */
+	W = (int)barw(m);
+	H = bh + 2 * bb;
+	if (W <= 0 || H <= 0)
+		return;
+
+	/* 与 drawdec 相同的 FVWM MWMBorder 分层（bar 不画把手槽） */
+	w_hiout = 2;
+	w_shin = 1;
+	sum = 3;
+	trim = sum - bb + 1;
+	if (bb == 2)
+		trim--;
+	if (trim < 0)
+		trim = 0;
+	for (; trim > 0; trim--) {
+		if (w_hiout > 1)
+			w_hiout--;
+		else if (w_shin > 0)
+			w_shin--;
+		else if (w_hiout > 0)
+			w_hiout--;
+		sum--;
+	}
+	w_c = bb - sum;
+	if (w_c < 0)
+		w_c = 0;
+
+	/* 栏用选中色，与激活窗口边框一致 */
+	face = scheme[SchemeSel][ColBorder].pixel;
+	hi = borderhi.pixel;
+	sh = bordersh.pixel;
+
+	gcv.graphics_exposures = False;
+	gc = XCreateGC(dpy, m->bardec, GCGraphicsExposures, &gcv);
+	rgc = XCreateGC(dpy, m->bardec, GCGraphicsExposures, &gcv);
+	sgc = XCreateGC(dpy, m->bardec, GCGraphicsExposures, &gcv);
+	XSetForeground(dpy, rgc, hi);
+	XSetForeground(dpy, sgc, sh);
+
+	/* 1) face 环 */
+	XSetForeground(dpy, gc, face);
+	XFillRectangle(dpy, m->bardec, gc, 0, 0, W, bb);
+	XFillRectangle(dpy, m->bardec, gc, 0, H - bb, W, bb);
+	XFillRectangle(dpy, m->bardec, gc, 0, bb, bb, H - 2 * bb);
+	XFillRectangle(dpy, m->bardec, gc, W - bb, bb, bb, H - 2 * bb);
+
+	/* 2) 外凸 */
+	if (w_hiout > 0)
+		relieve(m->bardec, rgc, sgc, 0, 0, W - 1, H - 1, w_hiout);
+
+	/* 3) 内凹 */
+	if (w_shin > 0) {
+		o = w_hiout + w_c;
+		relieve(m->bardec, sgc, rgc, o, o, W - 1 - 2 * o, H - 1 - 2 * o, w_shin);
+	}
+
+	XFreeGC(dpy, gc);
+	XFreeGC(dpy, rgc);
+	XFreeGC(dpy, sgc);
+}
+
 void
 drawbar(Monitor *m)
 {
-	int x, w, tw = 0, stw = 0;
+	int x, w, tw = 0;
 	int boxs = drw->fonts->h / 9;
 	int boxw = drw->fonts->h / 6 + 2;
-	unsigned int i, occ = 0, urg = 0;
+	unsigned int i, occ = 0, urg = 0, cw;
 	Client *c;
 
 	if (!m->showbar)
 		return;
 
-	if(showsystray && m == systraytomon(m) && !systrayonleft)
-		stw = getsystraywidth();
+	cw = barinnerw(m);
 
 	/* draw status first so it can be overdrawn by tags later */
 	if (m == selmon) { /* status is only drawn on selected monitor */
-		tw = m->ww - drawstatusbar(m, bh, stext);
+		tw = cw - drawstatusbar(m, bh, stext);
 	}
 
 	resizebarwin(m);
+	drawbardec(m);
 	for (c = m->clients; c; c = c->next) {
 		occ |= c->tags == TAGMASK ? 0 : c->tags;
 		if (c->isurgent)
@@ -1443,7 +1557,7 @@ drawbar(Monitor *m)
 	drw_setscheme(drw, scheme[SchemeNorm]);
 	x = drw_text(drw, x, 0, w, bh, lrpad / 2, m->ltsymbol, 0);
 
-	if ((w = m->ww - tw - stw - x) > bh) {
+	if ((w = (int)cw - tw - x) > bh) {
 		if (m->sel) {
 			drw_setscheme(drw, scheme[m == selmon ? SchemeSel : SchemeNorm]);
 			drw_text(drw, x, 0, w, bh, lrpad / 2, m->sel->name, 0);
@@ -1454,7 +1568,7 @@ drawbar(Monitor *m)
 			drw_rect(drw, x, 0, w, bh, 1, 1);
 		}
 	}
-	drw_map(drw, m->barwin, 0, 0, m->ww - stw, bh);
+	drw_map(drw, m->barwin, 0, 0, cw, bh);
 }
 
 void
@@ -1504,7 +1618,10 @@ expose(XEvent *e)
 	XExposeEvent *ev = &e->xexpose;
 
 	if (ev->count == 0 && (m = wintomon(ev->window))) {
-		drawbar(m);
+		if (ev->window == m->bardec)
+			drawbardec(m);
+		else
+			drawbar(m);
 		if (m == selmon)
 			updatesystray();
 	} else if (ev->count == 0 && (c = wintoclient(ev->window)) && ev->window == c->dec)
@@ -2154,10 +2271,18 @@ resize(Client *c, int x, int y, int w, int h, int interact)
 
 void
 resizebarwin(Monitor *m) {
-	unsigned int w = m->ww;
-	if (showsystray && m == systraytomon(m) && !systrayonleft)
-		w -= getsystraywidth();
-	XMoveResizeWindow(dpy, m->barwin, m->wx, m->by, w, bh);
+	unsigned int w = barw(m);
+	unsigned int iw = barinnerw(m);
+	int bb = (int)barborderpx;
+
+	if (m->bardec)
+		XMoveResizeWindow(dpy, m->bardec, m->wx, m->by, w, bh + 2 * bb);
+	if (m->barwin) {
+		if (m->bardec)
+			XMoveResizeWindow(dpy, m->barwin, bb, bb, iw, bh);
+		else
+			XMoveResizeWindow(dpy, m->barwin, m->wx, m->by, w, bh);
+	}
 }
 
 void
@@ -2271,7 +2396,8 @@ restack(Monitor *m)
 	}
 	if (m->lt[m->sellt]->arrange) {
 		wc.stack_mode = Below;
-		wc.sibling = m->barwin;
+		/* barwin may be child of bardec; sibling must be a root child */
+		wc.sibling = m->bardec ? m->bardec : m->barwin;
 		for (c = m->stack; c; c = c->snext)
 			if (!c->isfloating && ISVISIBLE(c)) {
 				if (c->dec) {
@@ -2799,11 +2925,11 @@ togglebar(const Arg *arg)
 	if (showsystray) {
 		XWindowChanges wc;
 		if (!selmon->showbar)
-			wc.y = -bh;
+			wc.y = -barareaheight();
 		else if (selmon->showbar) {
-			wc.y = 0;
+			wc.y = (int)barborderpx;
 			if (!selmon->topbar)
-				wc.y = selmon->mh - bh;
+				wc.y = selmon->mh - bh - (int)barborderpx;
 		}
 		XConfigureWindow(dpy, systray->win, CWY, &wc);
 	}
@@ -3135,12 +3261,26 @@ updatebars(void)
 	for (m = mons; m; m = m->next) {
 		if (m->barwin)
 			continue;
-		w = m->ww;
-		if (showsystray && m == systraytomon(m))
-			w -= getsystraywidth();
-		m->barwin = XCreateWindow(dpy, root, m->wx, m->by, w, bh, 0, DefaultDepth(dpy, screen),
-				CopyFromParent, DefaultVisual(dpy, screen),
-				CWOverrideRedirect|CWBackPixmap|CWEventMask, &wa);
+		w = barw(m);
+		if (barborderpx) {
+			/* bardec width == barw (on-screen); barwin inset by barborderpx */
+			m->bardec = XCreateWindow(dpy, root, m->wx, m->by,
+					w, bh + 2 * barborderpx, 0,
+					DefaultDepth(dpy, screen), CopyFromParent, DefaultVisual(dpy, screen),
+					CWOverrideRedirect|CWBackPixmap|CWEventMask, &wa);
+			XDefineCursor(dpy, m->bardec, cursor[CurNormal]->cursor);
+			XMapRaised(dpy, m->bardec);
+			XSetClassHint(dpy, m->bardec, &ch);
+			m->barwin = XCreateWindow(dpy, m->bardec, barborderpx, barborderpx,
+					barinnerw(m), bh, 0,
+					DefaultDepth(dpy, screen), CopyFromParent, DefaultVisual(dpy, screen),
+					CWOverrideRedirect|CWBackPixmap|CWEventMask, &wa);
+		} else {
+			m->bardec = None;
+			m->barwin = XCreateWindow(dpy, root, m->wx, m->by, w, bh, 0, DefaultDepth(dpy, screen),
+					CopyFromParent, DefaultVisual(dpy, screen),
+					CWOverrideRedirect|CWBackPixmap|CWEventMask, &wa);
+		}
 		XDefineCursor(dpy, m->barwin, cursor[CurNormal]->cursor);
 		if (showsystray && m == systraytomon(m))
 			XMapRaised(dpy, systray->win);
@@ -3152,14 +3292,16 @@ updatebars(void)
 void
 updatebarpos(Monitor *m)
 {
+	int bah = barareaheight();
+
 	m->wy = m->my;
 	m->wh = m->mh;
 	if (m->showbar) {
-		m->wh -= bh;
+		m->wh -= bah;
 		m->by = m->topbar ? m->wy : m->wy + m->wh;
-		m->wy = m->topbar ? m->wy + bh : m->wy;
+		m->wy = m->topbar ? m->wy + bah : m->wy;
 	} else
-		m->by = -bh;
+		m->by = -bah;
 }
 
 void
@@ -3389,7 +3531,7 @@ updatesystray(void)
 		/* init systray */
 		if (!(systray = (Systray *)calloc(1, sizeof(Systray))))
 			die("fatal: could not malloc() %u bytes\n", sizeof(Systray));
-		systray->win = XCreateSimpleWindow(dpy, root, x, m->by, w, bh, 0, 0, scheme[SchemeSel][ColBg].pixel);
+		systray->win = XCreateSimpleWindow(dpy, root, x, m->by + (int)barborderpx, w, bh, 0, 0, scheme[SchemeSel][ColBg].pixel);
 		wa.event_mask        = ButtonPressMask | ExposureMask;
 		wa.override_redirect = True;
 		wa.background_pixel  = scheme[SchemeNorm][ColBg].pixel;
@@ -3427,9 +3569,9 @@ updatesystray(void)
 	refresh_systray_icons = 0;
 	w = w ? w + systrayspacing : 1;
 	x -= w;
-	XMoveResizeWindow(dpy, systray->win, x, m->by, w, bh);
-	wc.x = x; wc.y = m->by; wc.width = w; wc.height = bh;
-	wc.stack_mode = Above; wc.sibling = m->barwin;
+	XMoveResizeWindow(dpy, systray->win, x, m->by + (int)barborderpx, w, bh);
+	wc.x = x; wc.y = m->by + (int)barborderpx; wc.width = w; wc.height = bh;
+	wc.stack_mode = Above; wc.sibling = m->bardec ? m->bardec : m->barwin;
 	XConfigureWindow(dpy, systray->win, CWX|CWY|CWWidth|CWHeight|CWSibling|CWStackMode, &wc);
 	XMapWindow(dpy, systray->win);
 	XMapSubwindows(dpy, systray->win);
@@ -3677,7 +3819,7 @@ wintomon(Window w)
 	if (w == root && getrootptr(&x, &y))
 		return recttomon(x, y, 1, 1);
 	for (m = mons; m; m = m->next)
-		if (w == m->barwin)
+		if (w == m->barwin || w == m->bardec)
 			return m;
 	if ((c = wintoclient(w)))
 		return c->mon;
