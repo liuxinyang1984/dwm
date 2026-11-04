@@ -2248,13 +2248,15 @@ void
 tagmon(const Arg *arg)
 {
 	Client *c = selmon->sel;
+	XEvent ev;
 
 	if (!c || !mons->next)
 		return;
 	sendmon(c, dirtomon(arg->i));
-	/* 跟窗换屏：焦点落到目标显示器上的该窗口 */
+	/* 跟窗换屏；丢掉 arrange 产生的 EnterNotify，避免焦点被抢回原屏 */
 	selmon = c->mon;
 	focus(c);
+	while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
 
 void
