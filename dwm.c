@@ -237,6 +237,7 @@ static void grabkeys(void);
 static void incnmaster(const Arg *arg);
 static void keypress(XEvent *e);
 static void killclient(const Arg *arg);
+static void losefullscreen(Client *next);
 static void manage(Window w, XWindowAttributes *wa);
 static void mappingnotify(XEvent *e);
 static void maprequest(XEvent *e);
@@ -780,9 +781,12 @@ clientmessage(XEvent *e)
 		return;
 	if (cme->message_type == netatom[NetWMState]) {
 		if (cme->data.l[1] == netatom[NetWMFullscreen]
-		|| cme->data.l[2] == netatom[NetWMFullscreen])
+		|| cme->data.l[2] == netatom[NetWMFullscreen]) {
+			if (c->fakefullscreen == 2 && c->isfullscreen)
+				c->fakefullscreen = 3;
 			setfullscreen(c, (cme->data.l[0] == 1 /* _NET_WM_STATE_ADD    */
 				|| (cme->data.l[0] == 2 /* _NET_WM_STATE_TOGGLE */ && !c->isfullscreen)));
+		}
 	} else if (cme->message_type == netatom[NetActiveWindow]) {
 		if (c != selmon->sel && !c->isurgent)
 			seturgent(c, 1);
@@ -1212,9 +1216,14 @@ destroynotify(XEvent *e)
 	Client *c;
 	XDestroyWindowEvent *ev = &e->xdestroywindow;
 
-	if ((c = wintoclient(ev->window)))
+	if ((c = wintoclient(ev->window))) {
+		/* CDE dec is tracked via wintoclient; its destroy is not the client */
+		if (c->dec && ev->window == c->dec) {
+			c->dec = None;
+			return;
+		}
 		unmanage(c, 1);
-	else if ((c = swallowingclient(ev->window)))
+	} else if ((c = swallowingclient(ev->window)))
 		unmanage(c->swallowing, 1);
 	else if ((c = wintosystrayicon(ev->window))) {
 		removesystrayicon(c);
@@ -1633,8 +1642,10 @@ focus(Client *c)
 {
 	if (!c || !ISVISIBLE(c))
 		for (c = selmon->stack; c && !ISVISIBLE(c); c = c->snext);
-	if (selmon->sel && selmon->sel != c)
+	if (selmon->sel && selmon->sel != c) {
+		losefullscreen(c);
 		unfocus(selmon->sel, 0);
+	}
 	if (c) {
 		if (c->mon != selmon)
 			selmon = c->mon;
@@ -1697,7 +1708,7 @@ focusstack(const Arg *arg)
 {
 	Client *c = NULL, *i;
 
-	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
+	if (!selmon->sel || (selmon->sel->isfullscreen && selmon->sel->fakefullscreen != 1))
 		return;
 	if (arg->i > 0) {
 		for (c = selmon->sel->next; c && !ISVISIBLE(c); c = c->next);
@@ -1967,6 +1978,18 @@ killclient(const Arg *arg)
 }
 
 void
+losefullscreen(Client *next)
+{
+	Client *sel = selmon->sel;
+
+	if (!sel || !next)
+		return;
+	if (sel->isfullscreen && sel->fakefullscreen != 1 && ISVISIBLE(sel)
+	&& sel->mon == next->mon && !next->isfloating)
+		setfullscreen(sel, 0);
+}
+
+void
 manage(Window w, XWindowAttributes *wa)
 {
 	Client *c, *t = NULL, *term = NULL;
@@ -2036,8 +2059,10 @@ manage(Window w, XWindowAttributes *wa)
 		(unsigned char *) &(c->win), 1);
 	XMoveResizeWindow(dpy, c->win, c->x + 2 * sw, c->y, c->w, c->h); /* some windows require this */
 	setclientstate(c, NormalState);
-	if (c->mon == selmon)
+	if (c->mon == selmon) {
+		losefullscreen(c);
 		unfocus(selmon->sel, 0);
+	}
 	c->mon->sel = c;
 	arrange(c->mon);
 	if (c->dec)
@@ -2527,37 +2552,62 @@ setfocus(Client *c)
 void
 setfullscreen(Client *c, int fullscreen)
 {
-	if (fullscreen && !c->isfullscreen) {
-		XChangeProperty(dpy, c->win, netatom[NetWMState], XA_ATOM, 32,
-			PropModeReplace, (unsigned char*)&netatom[NetWMFullscreen], 1);
+	XEvent ev;
+	int savestate = 0, restorestate = 0, restorefakefullscreen = 0;
+
+	if ((c->fakefullscreen == 0 && fullscreen && !c->isfullscreen) /* normal fullscreen */
+	|| (c->fakefullscreen == 2 && fullscreen)) /* fake fullscreen --> actual fullscreen */
+		savestate = 1;
+	else if ((c->fakefullscreen == 0 && !fullscreen && c->isfullscreen) /* normal fullscreen exit */
+	|| (c->fakefullscreen >= 2 && !fullscreen)) /* fullscreen exit --> fake fullscreen */
+		restorestate = 1;
+
+	/* 离开真全屏且先前为 fake(2)：保持全屏并回到 fake；客户端自己退出(3)则例外 */
+	if (c->fakefullscreen == 2 && !fullscreen && c->isfullscreen) {
+		restorefakefullscreen = 1;
 		c->isfullscreen = 1;
+		fullscreen = 1;
+	}
+
+	if (fullscreen != c->isfullscreen) {
+		if (fullscreen)
+			XChangeProperty(dpy, c->win, netatom[NetWMState], XA_ATOM, 32,
+				PropModeReplace, (unsigned char*)&netatom[NetWMFullscreen], 1);
+		else
+			XChangeProperty(dpy, c->win, netatom[NetWMState], XA_ATOM, 32,
+				PropModeReplace, (unsigned char*)0, 0);
+	}
+
+	c->isfullscreen = fullscreen;
+
+	/* firefox 等会在 WM 写属性后再发 ClientMessage，setfullscreen 可能被叫两次；
+	 * oldstate bit1 保证只按「先存后还」顺序处理。 */
+	if (savestate && !(c->oldstate & (1 << 1))) {
 		c->oldbw = c->bw;
-		if (c->fakefullscreen == 1)
-			return;
-		c->oldstate = c->isfloating;
+		c->oldstate = c->isfloating | (1 << 1);
 		c->bw = 0;
 		c->isfloating = 1;
 		resizeclient(c, c->mon->mx, c->mon->my, c->mon->mw, c->mon->mh);
-		if (c->dec)
-			XRaiseWindow(dpy, c->dec);
 		XRaiseWindow(dpy, c->win);
-	} else if (!fullscreen && c->isfullscreen){
-		XChangeProperty(dpy, c->win, netatom[NetWMState], XA_ATOM, 32,
-			PropModeReplace, (unsigned char*)0, 0);
-		c->isfullscreen = 0;
+	} else if (restorestate && (c->oldstate & (1 << 1))) {
 		c->bw = c->oldbw;
-		if (c->fakefullscreen == 1)
-			return;
-		if (c->fakefullscreen == 2)
+		c->isfloating = c->oldstate = c->oldstate & 1;
+		if (restorefakefullscreen || c->fakefullscreen == 3)
 			c->fakefullscreen = 1;
-		c->isfloating = c->oldstate;
-		c->x = c->oldx;
-		c->y = c->oldy;
-		c->w = c->oldw;
-		c->h = c->oldh;
+		if (c->isfloating) {
+			c->x = MAX(c->mon->wx, c->oldx);
+			c->y = MAX(c->mon->wy, c->oldy);
+			c->w = MIN(c->mon->ww - c->x - 2 * c->bw, c->oldw);
+			c->h = MIN(c->mon->wh - c->y - 2 * c->bw, c->oldh);
+			resizeclient(c, c->x, c->y, c->w, c->h);
+			restack(c->mon);
+		} else
+			arrange(c->mon);
+	} else
 		resizeclient(c, c->x, c->y, c->w, c->h);
-		arrange(c->mon);
-	}
+
+	if (!c->isfullscreen)
+		while (XCheckMaskEvent(dpy, EnterWindowMask, &ev));
 }
 
 void
@@ -2781,11 +2831,22 @@ void
 tagmon(const Arg *arg)
 {
 	Client *c = selmon->sel;
+	Monitor *m;
 	XEvent ev;
 
 	if (!c || !mons->next)
 		return;
-	sendmon(c, dirtomon(arg->i));
+	m = dirtomon(arg->i);
+	if (c->isfullscreen) {
+		c->isfullscreen = 0;
+		sendmon(c, m);
+		c->isfullscreen = 1;
+		if (c->fakefullscreen != 1) {
+			resizeclient(c, c->mon->mx, c->mon->my, c->mon->mw, c->mon->mh);
+			XRaiseWindow(dpy, c->win);
+		}
+	} else
+		sendmon(c, m);
 	/* 跟窗换屏；丢掉 arrange 产生的 EnterNotify，避免焦点被抢回原屏 */
 	selmon = c->mon;
 	focus(c);
@@ -2944,46 +3005,31 @@ togglefakefullscreen(const Arg *arg)
 	if (!c)
 		return;
 
-	if (c->fakefullscreen) {
-		if (c->isfullscreen) {
-			if (c->isfloating && c->fakefullscreen == 1) {
-				c->oldstate = c->isfloating;
-				c->oldx = c->x;
-				c->oldy = c->y;
-				c->oldw = c->w;
-				c->oldh = c->h;
-			}
-			c->fakefullscreen = 0;
-		} else
-			c->isfullscreen = 0;
+	if (c->fakefullscreen != 1 && c->isfullscreen) { /* exit fullscreen --> fake fullscreen */
+		c->fakefullscreen = 2;
+		setfullscreen(c, 0);
+	} else if (c->fakefullscreen == 1) {
+		setfullscreen(c, 0);
+		c->fakefullscreen = 0;
 	} else {
 		c->fakefullscreen = 1;
-		if (c->isfullscreen) {
-			c->isfloating = c->oldstate;
-			c->bw = c->oldbw;
-			c->x = c->oldx;
-			c->y = c->oldy;
-			c->w = c->oldw;
-			c->h = c->oldh;
-			resizeclient(c, c->x, c->y, c->w, c->h);
-		}
-		c->isfullscreen = 0;
+		setfullscreen(c, 1);
 	}
-	setfullscreen(c, !c->isfullscreen);
 }
 
 void
 togglefloating(const Arg *arg)
 {
-	if (!selmon->sel)
+	Client *c = selmon->sel;
+
+	if (!c)
 		return;
-	if (selmon->sel->isfullscreen && selmon->sel->fakefullscreen != 1) /* no support for fullscreen windows */
+	if (c->isfullscreen && c->fakefullscreen != 1) /* no support for fullscreen windows */
 		return;
-	selmon->sel->isfloating = !selmon->sel->isfloating || selmon->sel->isfixed;
-	if (selmon->sel->isfloating)
-		resize(selmon->sel, selmon->sel->x, selmon->sel->y,
-			selmon->sel->w, selmon->sel->h, 0);
-	arrange(selmon);
+	c->isfloating = !c->isfloating || c->isfixed;
+	if (c->isfloating)
+		resize(c, c->x, c->y, c->w, c->h, 0);
+	arrange(c->mon);
 }
 
 void
@@ -2993,15 +3039,12 @@ togglefullscreen(const Arg *arg)
 
 	if (!c)
 		return;
-	if (c->fakefullscreen == 1) {
-		c->fakefullscreen = 0;
-		if (c->isfullscreen) {
-			c->isfullscreen = 0;
-			setfullscreen(c, 1);
-			return;
-		}
-	}
-	setfullscreen(c, !c->isfullscreen);
+
+	if (c->fakefullscreen == 1) { /* fake fullscreen --> fullscreen */
+		c->fakefullscreen = 2;
+		setfullscreen(c, 1);
+	} else
+		setfullscreen(c, !c->isfullscreen);
 }
 
 void
@@ -3234,6 +3277,9 @@ unmapnotify(XEvent *e)
 	XUnmapEvent *ev = &e->xunmap;
 
 	if ((c = wintoclient(ev->window))) {
+		/* fullscreen 等会把 bw 置 0 并 Unmap CDE 装饰；不能当成客户端 withdraw */
+		if (c->dec && ev->window == c->dec)
+			return;
 		if (ev->send_event)
 			setclientstate(c, WithdrawnState);
 		else
