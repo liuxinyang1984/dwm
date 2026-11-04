@@ -192,6 +192,7 @@ static void configure(Client *c);
 static void configurenotify(XEvent *e);
 static void configurerequest(XEvent *e);
 static Monitor *createmon(void);
+static void orientlayout(Monitor *m);
 static void destroynotify(XEvent *e);
 static void detach(Client *c);
 static void detachstack(Client *c);
@@ -220,6 +221,8 @@ static void killclient(const Arg *arg);
 static void manage(Window w, XWindowAttributes *wa);
 static void mappingnotify(XEvent *e);
 static void maprequest(XEvent *e);
+static void bstack(Monitor *m);
+static void bstackhoriz(Monitor *m);
 static void monocle(Monitor *m);
 static void motionnotify(XEvent *e);
 static void movemouse(const Arg *arg);
@@ -253,6 +256,7 @@ static void spawn(const Arg *arg);
 static Monitor *systraytomon(Monitor *m);
 static void tag(const Arg *arg);
 static void tagmon(const Arg *arg);
+static void cyclelayout(const Arg *arg);
 static void tile(Monitor *m);
 static void togglebar(const Arg *arg);
 static void togglefakefullscreen(const Arg *arg);
@@ -866,6 +870,34 @@ createmon(void)
 	}
 
 	return m;
+}
+
+/* 横屏 tile，竖屏 bstackhoriz；几何变化时由 updategeom 调用 */
+void
+orientlayout(Monitor *m)
+{
+	unsigned int i;
+	const Layout *l = &layouts[0];
+	void (*want)(Monitor *) = (m->mw < m->mh) ? bstackhoriz : tile;
+
+	for (i = 0; i < LENGTH(layouts); i++)
+		if (layouts[i].arrange == want) {
+			l = &layouts[i];
+			break;
+		}
+
+	m->lt[0] = l;
+	for (i = 0; i <= LENGTH(tags); i++)
+		m->pertag->ltidxs[i][0] = l;
+
+	/* 当前已是 tile/===（或仍在槽 0）则立刻跟上朝向；monocle 等不打断 */
+	if (m->sellt == 0
+	|| (m->lt[m->sellt] && (m->lt[m->sellt]->arrange == tile
+	    || m->lt[m->sellt]->arrange == bstackhoriz))) {
+		m->lt[m->sellt] = l;
+		m->pertag->ltidxs[m->pertag->curtag][m->sellt] = l;
+		strncpy(m->ltsymbol, l->symbol, sizeof m->ltsymbol);
+	}
 }
 
 void
@@ -2215,9 +2247,39 @@ tag(const Arg *arg)
 void
 tagmon(const Arg *arg)
 {
-	if (!selmon->sel || !mons->next)
+	Client *c = selmon->sel;
+
+	if (!c || !mons->next)
 		return;
-	sendmon(selmon->sel, dirtomon(arg->i));
+	sendmon(c, dirtomon(arg->i));
+	/* 跟窗换屏：焦点落到目标显示器上的该窗口 */
+	selmon = c->mon;
+	focus(c);
+}
+
+void
+cyclelayout(const Arg *arg)
+{
+	/* tile → bstackhoriz → bstack → tile */
+	void (*order[])(Monitor *) = { tile, bstackhoriz, bstack };
+	unsigned int i, j, n = LENGTH(order);
+	const Layout *cur = selmon->lt[selmon->sellt];
+	const Layout *next = &layouts[0];
+	void (*want)(Monitor *);
+
+	for (i = 0; i < n; i++) {
+		if (cur && cur->arrange == order[i]) {
+			want = order[(i + 1) % n];
+			for (j = 0; j < LENGTH(layouts); j++)
+				if (layouts[j].arrange == want) {
+					next = &layouts[j];
+					break;
+				}
+			setlayout(&((Arg){ .v = next }));
+			return;
+		}
+	}
+	setlayout(&((Arg){ .v = &layouts[0] }));
 }
 
 void
@@ -2246,6 +2308,75 @@ tile(Monitor *m)
 			if (ty + HEIGHT(c) + m->gappx < m->wh)
 				ty += HEIGHT(c) + m->gappx;
 		}
+}
+
+/* bottomstack：主区在上；bstack 底栏左右分，bstackhoriz 底栏上下叠（竖屏常用） */
+void
+bstack(Monitor *m)
+{
+	unsigned int i, n;
+	int w, h, mh, mx, tx, ty, tw;
+	Client *c;
+
+	for (n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
+	if (n == 0)
+		return;
+
+	if (n > m->nmaster) {
+		mh = m->nmaster ? m->wh * m->mfact : 0;
+		tw = (m->ww - m->gappx) / (n - m->nmaster) - m->gappx;
+		ty = m->wy + mh;
+	} else {
+		mh = m->wh - m->gappx;
+		tw = m->ww - 2 * m->gappx;
+		ty = m->wy + m->gappx;
+	}
+	for (i = 0, mx = m->gappx, tx = m->wx + m->gappx, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++) {
+		if (i < m->nmaster) {
+			w = (m->ww - mx) / (MIN(n, m->nmaster) - i) - m->gappx;
+			resize(c, m->wx + mx, m->wy + m->gappx, w - (2 * c->bw), mh - (2 * c->bw) - m->gappx, 0);
+			if (mx + WIDTH(c) + m->gappx < m->ww)
+				mx += WIDTH(c) + m->gappx;
+		} else {
+			h = m->wh - mh - m->gappx;
+			resize(c, tx, ty, tw - (2 * c->bw), h - (2 * c->bw), 0);
+			if (tw + m->gappx != m->ww)
+				tx += WIDTH(c) + m->gappx;
+		}
+	}
+}
+
+void
+bstackhoriz(Monitor *m)
+{
+	unsigned int i, n;
+	int w, mh, mx, tx, ty, th;
+	Client *c;
+
+	for (n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
+	if (n == 0)
+		return;
+
+	if (n > m->nmaster) {
+		mh = m->nmaster ? m->wh * m->mfact : 0;
+		th = (m->wh - mh - m->gappx) / (n - m->nmaster) - m->gappx;
+		ty = m->wy + mh;
+	} else {
+		th = mh = m->wh - m->gappx;
+		ty = m->wy + m->gappx;
+	}
+	for (i = 0, mx = m->gappx, tx = m->wx + m->gappx, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++) {
+		if (i < m->nmaster) {
+			w = (m->ww - mx) / (MIN(n, m->nmaster) - i) - m->gappx;
+			resize(c, m->wx + mx, m->wy + m->gappx, w - (2 * c->bw), mh - (2 * c->bw) - m->gappx, 0);
+			if (mx + WIDTH(c) + m->gappx < m->ww)
+				mx += WIDTH(c) + m->gappx;
+		} else {
+			resize(c, tx, ty, m->ww - (2 * c->bw) - 2 * m->gappx, th - (2 * c->bw), 0);
+			if (th + m->gappx != m->wh)
+				ty += HEIGHT(c) + m->gappx;
+		}
+	}
 }
 
 void
@@ -2339,8 +2470,9 @@ togglefullscreen(const Arg *arg)
 void
 togglelayout(const Arg *arg)
 {
+	/* 退出目标布局时回到另一槽（先前布局），勿写死 layouts[0]/tile） */
 	if (selmon->lt[selmon->sellt] == (Layout *)arg->v)
-		setlayout(&((Arg){ .v = &layouts[0] }));
+		setlayout(NULL);
 	else
 		setlayout(arg);
 }
@@ -2591,6 +2723,7 @@ updategeom(void)
 				m->mw = m->ww = unique[i].width;
 				m->mh = m->wh = unique[i].height;
 				updatebarpos(m);
+				orientlayout(m);
 			}
 		/* removed monitors if n > nn */
 		for (i = nn; i < n; i++) {
@@ -2618,6 +2751,7 @@ updategeom(void)
 			mons->mw = mons->ww = sw;
 			mons->mh = mons->wh = sh;
 			updatebarpos(mons);
+			orientlayout(mons);
 		}
 	}
 	if (dirty) {

@@ -61,6 +61,8 @@ static const Layout layouts[] = {
 	{ "[T]",      tile },    /* first entry is default */
 	{ "[F]",      NULL },    /* no layout function means floating behavior */
 	{ "[M]",      monocle },
+	{ "[TTT]",    bstack },       /* 主上，底栏左右分 */
+	{ "[===]",    bstackhoriz },  /* 主上，底栏上下叠（竖屏） */
 };
 
 /* key definitions */
@@ -116,14 +118,18 @@ static const Key keys[] = {
 	/* 固定 Super+Alt，不依赖 MODKEY（避免 MODKEY=Alt 时叠不成组合键） */
 	{ Mod4Mask|Mod1Mask,            XK_h,      setmfact,       {.f = -0.05} },
 	{ Mod4Mask|Mod1Mask,            XK_l,      setmfact,       {.f = +0.05} },
-	{ MODKEY|ControlMask,           XK_Return, zoom,           {0} },
+	{ MODKEY|ShiftMask,             XK_Return, zoom,           {0} }, /* 设为主窗口 */
+	{ MODKEY|ControlMask,           XK_Return, cyclelayout,    {0} }, /* tile/===/TTT 循环 */
 	{ MODKEY,                       XK_Tab,    view,           {0} },
 	{ MODKEY,                       XK_q,      killclient,     {0} },
 	{ MODKEY|ShiftMask,             XK_q,      spawn,          {.v = xkillcmd } },
 	{ MODKEY,                       XK_t,      togglefloating, {0} },
+	{ MODKEY|ShiftMask,             XK_t,      setlayout,      {.v = &layouts[0]} }, /* tile 左右 */
 	{ MODKEY,                       XK_m,      togglelayout,   {.v = &layouts[2]} },
 	{ MODKEY|ShiftMask,             XK_m,      togglefullscreen, {0} },
 	{ MODKEY|ShiftMask,             XK_f,      togglefakefullscreen, {0} },
+	{ MODKEY,                       XK_u,      setlayout,      {.v = &layouts[3]} }, /* bstack */
+	{ MODKEY,                       XK_o,      setlayout,      {.v = &layouts[4]} }, /* bstackhoriz */
 	{ MODKEY,                       XK_0,      view,           {.ui = ~0 } },
 	{ MODKEY|ShiftMask,             XK_0,      tag,            {.ui = ~0 } },
 	{ MODKEY,                       XK_comma,  focusmon,       {.i = -1 } },
