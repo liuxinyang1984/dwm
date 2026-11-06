@@ -283,6 +283,10 @@ static void togglefakefullscreen(const Arg *arg);
 static void togglefloating(const Arg *arg);
 static void togglefullscreen(const Arg *arg);
 static void togglelayout(const Arg *arg);
+static Monitor *monbyspec(int spec);
+static void relocatemon(Client *c, Monitor *m);
+static void relocatealltag(unsigned int tag, Monitor *m);
+static Client *clientwithtag(unsigned int tag);
 static void togglefloatdock(const Arg *arg);
 static void tagfloatdock(const Arg *arg);
 static void tagfloatdockfollow(const Arg *arg);
@@ -2025,14 +2029,20 @@ manage(Window w, XWindowAttributes *wa)
 	c->bw = borderpx;
 	c->dec = None;
 
-	/* 新窗出现时收起浮动终端 dock；隐藏 tag 不动 */
-	selmon->tagset[selmon->seltags] &= ~FLOATDOCKBIT;
+	/* 新窗出现时各屏收起浮动 dock；隐藏 tag 不动 */
+	{
+		Monitor *m;
+		for (m = mons; m; m = m->next)
+			m->tagset[m->seltags] &= ~FLOATDOCKBIT;
+	}
 	if (!strcmp(c->name, floatdockname)) {
+		Monitor *dm = monbyspec(floatdockmon);
+		c->mon = dm;
 		c->tags = FLOATDOCKBIT;
-		c->mon->tagset[c->mon->seltags] |= FLOATDOCKBIT;
+		dm->tagset[dm->seltags] |= FLOATDOCKBIT;
 		c->isfloating = True;
-		c->x = c->mon->wx + (c->mon->ww / 2 - WIDTH(c) / 2);
-		c->y = c->mon->wy + (c->mon->wh / 2 - HEIGHT(c) / 2);
+		c->x = dm->wx + (dm->ww / 2 - WIDTH(c) / 2);
+		c->y = dm->wy + (dm->wh / 2 - HEIGHT(c) / 2);
 	}
 
 	wc.border_width = 0;
@@ -2801,7 +2811,11 @@ spawn(const Arg *arg)
 	if (arg->v == dmenucmd)
 		dmenumon[0] = '0' + selmon->num;
 	/* 仅收起浮动 dock；隐藏 tag 保持，便于在其内 Super+Return */
-	selmon->tagset[selmon->seltags] &= ~FLOATDOCKBIT;
+	{
+		Monitor *m;
+		for (m = mons; m; m = m->next)
+			m->tagset[m->seltags] &= ~FLOATDOCKBIT;
+	}
 	if (fork() == 0) {
 		if (dpy)
 			close(ConnectionNumber(dpy));
@@ -3064,61 +3078,146 @@ togglelayout(const Arg *arg)
 		setlayout(arg);
 }
 
-/* Super+\：单实例浮动终端抽屉 */
+/* -1 最左，-2 最右，>=0 为 Monitor.num */
+static Monitor *
+monbyspec(int spec)
+{
+	Monitor *m, *r = NULL;
+
+	if (spec >= 0) {
+		for (m = mons; m; m = m->next)
+			if (m->num == spec)
+				return m;
+		return selmon;
+	}
+	for (m = mons; m; m = m->next) {
+		if (!r)
+			r = m;
+		else if (spec == -1 && m->mx < r->mx)
+			r = m;
+		else if (spec == -2 && m->mx > r->mx)
+			r = m;
+	}
+	return r ? r : selmon;
+}
+
+static void
+relocatemon(Client *c, Monitor *m)
+{
+	unsigned int tags;
+
+	if (!c || c->mon == m)
+		return;
+	tags = c->tags;
+	sendmon(c, m);
+	c->tags = tags;
+}
+
+static void
+relocatealltag(unsigned int tag, Monitor *m)
+{
+	Monitor *mon;
+	Client *c, *n;
+
+	for (mon = mons; mon; mon = mon->next) {
+		for (c = mon->clients; c; c = n) {
+			n = c->next;
+			if (c->tags & tag)
+				relocatemon(c, m);
+		}
+	}
+}
+
+static Client *
+clientwithtag(unsigned int tag)
+{
+	Monitor *m;
+	Client *c;
+
+	for (m = mons; m; m = m->next)
+		for (c = m->clients; c; c = c->next)
+			if (c->tags & tag)
+				return c;
+	return NULL;
+}
+
+/* Super+\：单实例浮动终端抽屉（钉左屏） */
 void
 togglefloatdock(const Arg *arg)
 {
-	Client *c;
+	Monitor *m = monbyspec(floatdockmon);
+	Client *c = clientwithtag(FLOATDOCKBIT);
 	Arg sparg = { .v = floatdockcmd };
 
-	for (c = selmon->clients; c && !(c->tags & FLOATDOCKBIT); c = c->next);
 	if (c) {
-		selmon->tagset[selmon->seltags] ^= FLOATDOCKBIT;
-		if (!(selmon->tagset[selmon->seltags] & (TAGMASK | HIDDENTAG | FLOATDOCKBIT)))
-			selmon->tagset[selmon->seltags] = 1;
+		Monitor *mm;
+		int show = !(m->tagset[m->seltags] & FLOATDOCKBIT);
+
+		relocatealltag(FLOATDOCKBIT, m);
+		for (mm = mons; mm; mm = mm->next)
+			mm->tagset[mm->seltags] &= ~FLOATDOCKBIT;
+		if (show)
+			m->tagset[m->seltags] |= FLOATDOCKBIT;
+		else if (!(m->tagset[m->seltags] & (TAGMASK | HIDDENTAG)))
+			m->tagset[m->seltags] = 1;
+		unfocus(selmon->sel, 0);
+		selmon = m;
 		focus(NULL);
-		arrange(selmon);
-		if (ISVISIBLE(c)) {
+		arrange(NULL);
+		if (show && ISVISIBLE(c)) {
 			focus(c);
-			restack(selmon);
+			restack(m);
 		}
-	} else
+	} else {
+		unfocus(selmon->sel, 0);
+		selmon = m;
+		focus(NULL);
 		spawn(&sparg);
+	}
 }
 
 void
 tagfloatdock(const Arg *arg)
 {
+	Monitor *m = monbyspec(floatdockmon);
 	Client *c = selmon->sel;
 
 	if (!c)
 		return;
 	c->tags = FLOATDOCKBIT;
 	c->isfloating = 1;
+	relocatemon(c, m);
 	focus(NULL);
-	arrange(selmon);
+	arrange(NULL);
 }
 
 void
 tagfloatdockfollow(const Arg *arg)
 {
+	Monitor *m = monbyspec(floatdockmon);
 	Client *c = selmon->sel;
 
 	if (!c)
 		return;
 	c->tags = FLOATDOCKBIT;
 	c->isfloating = 1;
-	selmon->tagset[selmon->seltags] |= FLOATDOCKBIT;
+	relocatemon(c, m);
+	m->tagset[m->seltags] |= FLOATDOCKBIT;
+	unfocus(selmon->sel, 0);
+	selmon = m;
 	focus(c);
-	arrange(selmon);
+	arrange(m);
 }
 
-/* Super+BackSpace：栏外隐藏 tag，独占显示，可平铺 */
+/* Super+BackSpace：隐藏可平铺 tag（钉右屏） */
 void
 togglehiddentag(const Arg *arg)
 {
-	Monitor *m = selmon;
+	Monitor *m = monbyspec(hiddentagmon);
 
+	unfocus(selmon->sel, 0);
+	selmon = m;
+	relocatealltag(HIDDENTAG, m);
 	if (m->tagset[m->seltags] & HIDDENTAG) {
 		m->tagset[m->seltags] = m->hiddensave ? m->hiddensave : 1;
 	} else {
@@ -3134,30 +3233,35 @@ togglehiddentag(const Arg *arg)
 void
 taghidden(const Arg *arg)
 {
+	Monitor *m = monbyspec(hiddentagmon);
 	Client *c = selmon->sel;
 
 	if (!c)
 		return;
 	c->tags = HIDDENTAG;
+	relocatemon(c, m);
 	focus(NULL);
-	arrange(selmon);
+	arrange(NULL);
 }
 
 void
 taghiddenfollow(const Arg *arg)
 {
+	Monitor *m = monbyspec(hiddentagmon);
 	Client *c = selmon->sel;
-	Monitor *m = selmon;
 
 	if (!c)
 		return;
 	c->tags = HIDDENTAG;
+	relocatemon(c, m);
 	if (!(m->tagset[m->seltags] & HIDDENTAG)) {
 		m->hiddensave = m->tagset[m->seltags] & TAGMASK;
 		if (!m->hiddensave)
 			m->hiddensave = 1;
 		m->tagset[m->seltags] = HIDDENTAG;
 	}
+	unfocus(selmon->sel, 0);
+	selmon = m;
 	focus(c);
 	arrange(m);
 }
