@@ -2327,7 +2327,8 @@ bstack(Monitor *m)
 	if (n > m->nmaster) {
 		mh = m->nmaster ? m->wh * m->mfact : 0;
 		tw = (m->ww - m->gappx) / (n - m->nmaster) - m->gappx;
-		ty = m->wy + mh;
+		/* 主区底边在 wy+mh；再空 gappx，与 tile 主/栈间隙一致 */
+		ty = m->wy + mh + m->gappx;
 	} else {
 		mh = m->wh - m->gappx;
 		tw = m->ww - 2 * m->gappx;
@@ -2340,7 +2341,7 @@ bstack(Monitor *m)
 			if (mx + WIDTH(c) + m->gappx < m->ww)
 				mx += WIDTH(c) + m->gappx;
 		} else {
-			h = m->wh - mh - m->gappx;
+			h = m->wh - mh - 2 * m->gappx;
 			resize(c, tx, ty, tw - (2 * c->bw), h - (2 * c->bw), 0);
 			if (tw + m->gappx != m->ww)
 				tx += WIDTH(c) + m->gappx;
@@ -2361,8 +2362,9 @@ bstackhoriz(Monitor *m)
 
 	if (n > m->nmaster) {
 		mh = m->nmaster ? m->wh * m->mfact : 0;
-		th = (m->wh - mh - m->gappx) / (n - m->nmaster) - m->gappx;
-		ty = m->wy + mh;
+		/* 主/栈之间 + 底边各留 gappx */
+		th = (m->wh - mh - 2 * m->gappx) / (n - m->nmaster) - m->gappx;
+		ty = m->wy + mh + m->gappx;
 	} else {
 		th = mh = m->wh - m->gappx;
 		ty = m->wy + m->gappx;
