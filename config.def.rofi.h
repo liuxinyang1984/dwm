@@ -86,8 +86,9 @@ static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() 
 /* -nb/-nf 列表；-sb/-sf 选中（黄）。输入行色在 dmenu SchemePrompt，不受这两对覆盖 */
 static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", "-bw", "5", "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", "#d79921", "-sf", col_gray1, NULL };
 static const char *termcmd[]  = { "st", NULL };
-static const char scratchpadname[] = "scratchpad";
-static const char *scratchpadcmd[] = { "st", "-t", scratchpadname, "-g", "120x34", NULL };
+/* Super+\：单实例浮动终端 dock（标题须与 floatdockname 一致） */
+static const char floatdockname[] = "backslash";
+static const char *floatdockcmd[] = { "st", "-t", "backslash", "-g", "140x40", NULL };
 static const char *xkillcmd[] = { "xkill", NULL };
 /* 剪贴板历史：对齐本机 Hypr Super+V（cliphist+wofi）→ X11 clipmenu+dmenu */
 static const char *clipmenucmd[] = { "dmenu-clip", NULL };
@@ -113,7 +114,14 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_r,      spawn,          {.v = rofiruncmd } }, /* rofi run：PATH 命令 */
 	{ MODKEY,                       XK_v,      spawn,          {.v = clipmenucmd } }, /* 剪贴板历史 */
 	{ MODKEY,                       XK_Return, spawn,          {.v = termcmd } },
-	{ MODKEY,                       XK_grave,  togglescratch,  {.v = scratchpadcmd } },
+	/* \ / `：浮动终端 dock；BackSpace：隐藏可平铺 tag（栏上不显示） */
+	{ MODKEY,                       XK_grave,      togglefloatdock,   {0} },
+	{ MODKEY,                       XK_backslash,  togglefloatdock,   {0} },
+	{ MODKEY|ShiftMask,             XK_backslash,  tagfloatdock,      {0} },
+	{ MODKEY|ControlMask,           XK_backslash,  tagfloatdockfollow,{0} },
+	{ MODKEY,                       XK_BackSpace,  togglehiddentag,   {0} },
+	{ MODKEY|ShiftMask,             XK_BackSpace,  taghidden,         {0} },
+	{ MODKEY|ControlMask,           XK_BackSpace,  taghiddenfollow,   {0} },
 	{ MODKEY,                       XK_b,      togglebar,      {0} },
 	{ MODKEY,                       XK_j,      focusstack,     {.i = +1 } },
 	{ MODKEY,                       XK_k,      focusstack,     {.i = -1 } },
