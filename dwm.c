@@ -301,6 +301,8 @@ static pid_t winpid(Window w);
 
 /* variables */
 static Client *prevzoom = NULL;
+static Client *prevmaster = NULL; /* 上次主区焦点，供 Super+h 恢复 */
+static Client *prevslave = NULL;  /* 上次副区焦点，供 Super+l 恢复 */
 static Systray *systray = NULL;
 static int refresh_systray_icons = 0;
 static const char broken[] = "broken";
@@ -1239,6 +1241,21 @@ focus(Client *c)
 		XDeleteProperty(dpy, root, netatom[NetActiveWindow]);
 	}
 	selmon->sel = c;
+	/* 记下主/副区最近焦点，便于 h/l 跳回原窗而非总落在区首 */
+	if (c && !c->isfloating) {
+		Client *t;
+		int i;
+
+		for (i = 0, t = nexttiled(c->mon->clients); t; t = nexttiled(t->next), i++) {
+			if (t == c) {
+				if (i < c->mon->nmaster)
+					prevmaster = c;
+				else
+					prevslave = c;
+				break;
+			}
+		}
+	}
 	drawbars();
 }
 
@@ -1292,12 +1309,12 @@ focusstack(const Arg *arg)
 	}
 }
 
-/* 焦点 → 主区；已在主区则不动 */
+/* 焦点 → 主区（优先上次主区窗）；已在主区则不动 */
 static void
 focusmaster(const Arg *arg)
 {
-	Client *c, *m;
-	int i;
+	Client *c, *m, *t;
+	int i, ok = 0;
 
 	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
 		return;
@@ -1306,16 +1323,22 @@ focusmaster(const Arg *arg)
 	for (i = 0, c = m; c && i < selmon->nmaster; c = nexttiled(c->next), i++)
 		if (c == selmon->sel)
 			return;
-	focus(m);
+	/* prevmaster 仍在主区则用它，否则主区第一个 */
+	for (i = 0, t = m; t && i < selmon->nmaster; t = nexttiled(t->next), i++)
+		if (t == prevmaster) {
+			ok = 1;
+			break;
+		}
+	focus(ok ? prevmaster : m);
 	restack(selmon);
 }
 
-/* 焦点 → 副区第一个；已在副区则不动 */
+/* 焦点 → 副区（优先上次副区窗）；已在副区则不动 */
 static void
 focusslave(const Arg *arg)
 {
-	Client *c, *s;
-	int i;
+	Client *c, *s, *t;
+	int i, ok = 0;
 
 	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
 		return;
@@ -1326,7 +1349,12 @@ focusslave(const Arg *arg)
 		;
 	if (!s)
 		return;
-	focus(s);
+	for (t = s; t; t = nexttiled(t->next))
+		if (t == prevslave) {
+			ok = 1;
+			break;
+		}
+	focus(ok ? prevslave : s);
 	restack(selmon);
 }
 
@@ -2629,6 +2657,12 @@ unmanage(Client *c, int destroyed)
 
 	detach(c);
 	detachstack(c);
+	if (c == prevzoom)
+		prevzoom = NULL;
+	if (c == prevmaster)
+		prevmaster = NULL;
+	if (c == prevslave)
+		prevslave = NULL;
 	if (!destroyed) {
 		wc.border_width = c->oldbw;
 		XGrabServer(dpy); /* avoid race conditions */
