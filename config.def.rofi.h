@@ -1,10 +1,13 @@
-/* config.def.rofi.h — rofi 模板（make 缺 config.h 时复制此文件）
+/* config.def.rofi.h — CDE + rofi 模板（make 缺 config.h 时复制此文件）
  * Super+Space=drun，Super+r=run；与 config.def.h 保持同步。
  */
 /* See LICENSE file for copyright and license details. */
 
 /* appearance */
 static const unsigned int borderpx  = 5;        /* border pixel of windows */
+static const unsigned int barborderpx = 5;      /* outer CDE frame around barwin (0 = off) */
+/* 角宽（沿边）= FVWM corner_width ≈ TitleHeight + BorderWidth（20+5） */
+static const unsigned int handlewidth = 25;
 static const unsigned int gappx     = 5;        /* gaps between windows */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const unsigned int systraypinning = 0;   /* 0: sloppy systray follows selected monitor, >0: pin systray to monitor X */
@@ -29,11 +32,21 @@ static const char col_gray4[]       = "#ebdbb2"; /* fg */
 static const char col_cyan[]        = "#458588"; /* dmenu sel bg / 边框 */
 static const char col_arch[]        = "#7daea3"; /* Arch 图标底：Gruvbox Material blue */
 static const char col_sel_fg[]      = "#fabd2f"; /* 选中 tag/标题字：Gruvbox 亮黄 */
-static const char col_border[]      = "#458588"; /* 选中窗口边框 */
+/*
+ * CDE/FVWM 边框色 — 对齐 ~/.fvwm/conf.d/10-colorsets.conf
+ * Colorset 3/4 face；hi/sh 与同文件菜单对 #007070 的显式值一致，
+ * 非激活按 Motif 常用算法从 face 推（+1/3 向白 / ×0.5）
+ */
+static const char col_cde_norm[]    = "#738373"; /* Colorset 3 bg */
+static const char col_cde_sel[]     = "#007070"; /* Colorset 4 bg */
+static const char col_borderhi[]    = "#40a0a0"; /* active hilight（同 Colorset 6/8） */
+static const char col_borderhin[]   = "#a1afa1"; /* inactive hilight */
+static const char col_bordersh[]    = "#004040"; /* active shadow（同 Colorset 6/8） */
+static const char col_bordershn[]   = "#393c39"; /* inactive shadow */
 static const char *colors[][3]      = {
 	/*               fg         bg         border   */
-	[SchemeNorm] = { col_gray3, col_gray1, col_gray2 },
-	[SchemeSel]  = { col_sel_fg, col_gray1, col_border },
+	[SchemeNorm] = { col_gray3, col_gray1, col_cde_norm },
+	[SchemeSel]  = { col_sel_fg, col_gray1, col_cde_sel },
 	[SchemeArch] = { col_gray1, col_arch,  col_gray2 }, /* 栏左 Arch：深字 + Material 蓝底 */
 };
 
@@ -51,7 +64,8 @@ static const Rule rules[] = {
 	{ "Gimp",    NULL,     NULL,           0,         1,          0,           0,        -1 },
 	{ "Firefox", NULL,     NULL,           1 << 8,    0,          0,          -1,        -1 },
 	{ "St",      NULL,     NULL,           0,         0,          1,           0,        -1 },
-	{ "Rofi",    NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -normal-window */
+	{ "Rofi",    NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -normal-window：吃 CDE dec */
+	{ "dmenu",   NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -wm：吃 CDE dec */
 	{ NULL,      NULL,     "Event Tester", 0,         0,          0,           1,        -1 }, /* xev */
 };
 
@@ -59,7 +73,6 @@ static const Rule rules[] = {
 static const float mfact     = 0.55; /* factor of master area size [0.05..0.95] */
 static const int nmaster     = 1;    /* number of clients in master area */
 static const int resizehints = 1;    /* 1 means respect size hints in tiled resizals */
-static const int lockfullscreen = 1; /* 1 will force focus on the fullscreen window */
 static const int refreshrate = 120;  /* refresh rate (per second) for client move/resize */
 
 static const Layout layouts[] = {
@@ -85,8 +98,8 @@ static const Layout layouts[] = {
 
 /* commands */
 static char dmenumon[2] = "0"; /* component of dmenucmd, manipulated in spawn() */
-/* -nb/-nf 列表；-sb/-sf 选中（黄）。输入行色在 dmenu SchemePrompt，不受这两对覆盖 */
-static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", "-bw", "5", "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", "#d79921", "-sf", col_gray1, NULL };
+/* -wm：交给 dwm 画 CDE 边框；-bw 0 避免与自绘框叠两层。输入行色在 SchemePrompt */
+static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", "-wm", "-bw", "0", "-fn", dmenufont, "-nb", col_gray1, "-nf", col_gray3, "-sb", "#d79921", "-sf", col_gray1, NULL };
 static const char *termcmd[]  = { "st", NULL };
 /* Super+\：单实例浮动终端 dock（标题须与 floatdockname 一致） */
 static const char floatdockname[] = "backslash";
