@@ -208,6 +208,8 @@ static void focus(Client *c);
 static void focusin(XEvent *e);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
+static void focusmaster(const Arg *arg);
+static void focusslave(const Arg *arg);
 static Atom getatomprop(Client *c, Atom prop);
 static int getrootptr(int *x, int *y);
 static long getstate(Window w);
@@ -1288,6 +1290,44 @@ focusstack(const Arg *arg)
 		focus(c);
 		restack(selmon);
 	}
+}
+
+/* 焦点 → 主区；已在主区则不动 */
+static void
+focusmaster(const Arg *arg)
+{
+	Client *c, *m;
+	int i;
+
+	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
+		return;
+	if (!(m = nexttiled(selmon->clients)))
+		return;
+	for (i = 0, c = m; c && i < selmon->nmaster; c = nexttiled(c->next), i++)
+		if (c == selmon->sel)
+			return;
+	focus(m);
+	restack(selmon);
+}
+
+/* 焦点 → 副区第一个；已在副区则不动 */
+static void
+focusslave(const Arg *arg)
+{
+	Client *c, *s;
+	int i;
+
+	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
+		return;
+	for (i = 0, c = nexttiled(selmon->clients); c; c = nexttiled(c->next), i++)
+		if (c == selmon->sel && i >= selmon->nmaster)
+			return;
+	for (i = 0, s = nexttiled(selmon->clients); s && i < selmon->nmaster; s = nexttiled(s->next), i++)
+		;
+	if (!s)
+		return;
+	focus(s);
+	restack(selmon);
 }
 
 Atom
