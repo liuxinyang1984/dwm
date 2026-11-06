@@ -121,12 +121,14 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_l,      focusstack,     {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_j,      movestack,      {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_k,      movestack,      {.i = -1 } },
+	{ MODKEY|ShiftMask,             XK_h,      zoomto,         {.i = +1 } }, /* 设为主窗口 */
+	{ MODKEY|ShiftMask,             XK_l,      zoomto,         {.i = -1 } }, /* 设为副窗口 */
 	{ MODKEY,                       XK_i,      incnmaster,     {.i = +1 } },
 	{ MODKEY,                       XK_d,      incnmaster,     {.i = -1 } },
 	/* 固定 Super+Alt，不依赖 MODKEY（避免 MODKEY=Alt 时叠不成组合键） */
 	{ Mod4Mask|Mod1Mask,            XK_h,      setmfact,       {.f = -0.05} },
 	{ Mod4Mask|Mod1Mask,            XK_l,      setmfact,       {.f = +0.05} },
-	{ MODKEY|ShiftMask,             XK_Return, zoom,           {0} }, /* 设为主窗口 */
+	{ MODKEY|ShiftMask,             XK_Return, zoom,           {0} }, /* 主↔副切换 */
 	{ MODKEY|ControlMask,           XK_Return, cyclelayout,    {0} }, /* tile/===/TTT 循环 */
 	{ MODKEY,                       XK_Tab,    view,           {0} },
 	{ MODKEY,                       XK_q,      killclient,     {0} },

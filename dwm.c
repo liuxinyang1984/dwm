@@ -290,6 +290,7 @@ static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void zoom(const Arg *arg);
+static void zoomto(const Arg *arg);
 
 static pid_t getparentprocess(pid_t p);
 static int isdescprocess(pid_t p, pid_t c);
@@ -3286,6 +3287,27 @@ zoom(const Arg *arg)
 	}
 	focus(c);
 	arrange(c->mon);
+}
+
+/* arg->i > 0：升为主区；< 0：主区降为副区。已在目标角色则不动。 */
+static void
+zoomto(const Arg *arg)
+{
+	Client *c = selmon->sel, *m;
+
+	if (!selmon->lt[selmon->sellt]->arrange || !c || c->isfloating)
+		return;
+	if (!(m = nexttiled(selmon->clients)))
+		return;
+	if (arg->i > 0) {
+		if (c == m)
+			return;
+	} else if (arg->i < 0) {
+		if (c != m)
+			return;
+	} else
+		return;
+	zoom(arg);
 }
 
 int
