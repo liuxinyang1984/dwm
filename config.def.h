@@ -89,6 +89,7 @@ static const char *termcmd[]  = { "st", NULL };
 static const char floatdockname[] = "backslash";
 static const char *floatdockcmd[] = { "st", "-t", "backslash", "-g", "140x40", NULL };
 static const char *xkillcmd[] = { "xkill", NULL };
+static const char *slockcmd[] = { "slock", NULL };
 /* 剪贴板历史：对齐本机 Hypr Super+V（cliphist+wofi）→ X11 clipmenu+dmenu */
 static const char *clipmenucmd[] = { "dmenu-clip", NULL };
 /* rofi：./install.sh x11:rofi → rofi-drun（.desktop）/ rofi-run（PATH 命令） */
@@ -112,6 +113,7 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_space,  spawn,          {.v = roficmd } },    /* rofi drun：.desktop */
 	{ MODKEY,                       XK_r,      spawn,          {.v = rofiruncmd } }, /* rofi run：PATH 命令 */
 	{ MODKEY,                       XK_v,      spawn,          {.v = clipmenucmd } }, /* 剪贴板历史 */
+	{ MODKEY|ControlMask,           XK_l,      spawn,          {.v = slockcmd } }, /* 锁屏 */
 	{ MODKEY,                       XK_Return, spawn,          {.v = termcmd } },
 	/* \ / `：浮动终端 dock；BackSpace：隐藏可平铺 tag（栏上不显示） */
 	{ MODKEY,                       XK_grave,      togglefloatdock,   {0} },
