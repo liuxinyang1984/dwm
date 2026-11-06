@@ -219,6 +219,7 @@ static Atom getatomprop(Client *c, Atom prop);
 static int getrootptr(int *x, int *y);
 static long getstate(Window w);
 static unsigned int getsystraywidth();
+static int systrayiconsize(void);
 static int gettextprop(Window w, Atom atom, char *text, unsigned int size);
 static void grabbuttons(Client *c, int focused);
 static void grabkeys(void);
@@ -713,8 +714,8 @@ clientmessage(XEvent *e)
 			systray->icons = c;
 			if (!XGetWindowAttributes(dpy, c->win, &wa)) {
 				/* use sane defaults */
-				wa.width = bh;
-				wa.height = bh;
+				wa.width = systrayiconsize();
+				wa.height = systrayiconsize();
 				wa.border_width = 0;
 			}
 			c->x = c->oldx = c->y = c->oldy = 0;
@@ -1406,6 +1407,19 @@ getsystraywidth()
 	if(showsystray)
 		for(i = systray->icons; i; w += i->w + systrayspacing, i = i->next) ;
 	return w ? w + systrayspacing : 1;
+}
+
+/* 随 bh 变；ratio∈(0,1] 相对栏高缩小，上下居中留白 */
+int
+systrayiconsize(void)
+{
+	int sz = (int)(bh * systrayiconratio + 0.5);
+
+	if (sz < 1)
+		sz = 1;
+	if (sz > bh)
+		sz = bh;
+	return sz;
 }
 
 int
@@ -3007,24 +3021,17 @@ updatestatus(void)
 void
 updatesystrayicongeom(Client *i, int w, int h)
 {
-	if (i) {
-		i->h = bh;
-		if (w == h)
-			i->w = bh;
-		else if (h == bh)
-			i->w = w;
-		else
-			i->w = (int) ((float)bh * ((float)w / (float)h));
-		applysizehints(i, &(i->x), &(i->y), &(i->w), &(i->h), False);
-		/* force icons into the systray dimensions if they don't want to */
-		if (i->h > bh) {
-			if (i->w == i->h)
-				i->w = bh;
-			else
-				i->w = (int) ((float)bh * ((float)i->w / (float)i->h));
-			i->h = bh;
-		}
-	}
+	int sz;
+
+	if (!i)
+		return;
+	sz = systrayiconsize();
+	i->h = sz;
+	if (w <= 0 || h <= 0 || w == h)
+		i->w = sz;
+	else
+		i->w = MAX(1, (int)((float)sz * ((float)w / (float)h)));
+	/* 不走 applysizehints：其下限会把图标抬回 bh */
 }
 
 void
@@ -3101,7 +3108,8 @@ updatesystray(void)
 		XMapRaised(dpy, i->win);
 		w += systrayspacing;
 		i->x = w;
-		XMoveResizeWindow(dpy, i->win, i->x, 0, i->w, i->h);
+		i->y = (bh - i->h) / 2; /* 相对栏高居中 */
+		XMoveResizeWindow(dpy, i->win, i->x, i->y, i->w, i->h);
 		if (refresh_systray_icons)
 			XClearArea(dpy, i->win, 0, 0, 0, 0, True);
 		w += i->w;
