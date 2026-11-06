@@ -1736,7 +1736,7 @@ focusmaster(const Arg *arg)
 	Client *c, *m, *t;
 	int i, ok = 0;
 
-	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
+	if (!selmon->sel || (selmon->sel->isfullscreen && selmon->sel->fakefullscreen != 1))
 		return;
 	if (!(m = nexttiled(selmon->clients)))
 		return;
@@ -1760,7 +1760,7 @@ focusslave(const Arg *arg)
 	Client *c, *s, *t;
 	int i, ok = 0;
 
-	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
+	if (!selmon->sel || (selmon->sel->isfullscreen && selmon->sel->fakefullscreen != 1))
 		return;
 	for (i = 0, c = nexttiled(selmon->clients); c; c = nexttiled(c->next), i++)
 		if (c == selmon->sel && i >= selmon->nmaster)
