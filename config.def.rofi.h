@@ -8,7 +8,7 @@ static const unsigned int borderpx  = 5;        /* border pixel of windows */
 static const unsigned int barborderpx = 5;      /* outer CDE frame around barwin (0 = off) */
 /* 角宽（沿边）= FVWM corner_width ≈ TitleHeight + BorderWidth（20+5） */
 static const unsigned int handlewidth = 25;
-static const unsigned int gappx     = 5;        /* gaps between windows */
+static const unsigned int gappx     = 5;        /* 窗间缝 + 栏下缝；CDE：左右/底贴边 */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const unsigned int systraypinning = 0;   /* 0: sloppy systray follows selected monitor, >0: pin systray to monitor X */
 static const unsigned int systrayonleft = 1;    /* 0: systray in the right corner, >0: systray on left of status text */

@@ -2878,10 +2878,14 @@ cyclelayout(const Arg *arg)
 	setlayout(&((Arg){ .v = &layouts[0] }));
 }
 
+/*
+ * CDE gaps：只留「栏下」与「窗间」的 gappx；左右/底贴边（配合有框的 bar）。
+ * 窗间缝仍用 gappx；与 master 分支四边 outer 不同，勿回灌 master。
+ */
 void
 tile(Monitor *m)
 {
-	unsigned int i, n, h, mw, my, ty;
+	unsigned int i, n, h, mw, my, ty, rem;
 	Client *c;
 
 	for (n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
@@ -2891,18 +2895,20 @@ tile(Monitor *m)
 	if (n > m->nmaster)
 		mw = m->nmaster ? m->ww * m->mfact : 0;
 	else
-		mw = m->ww - m->gappx;
+		mw = m->ww;
 	for (i = 0, my = ty = m->gappx, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++)
 		if (i < m->nmaster) {
-			h = (m->wh - my) / (MIN(n, m->nmaster) - i) - m->gappx;
-			resize(c, m->wx + m->gappx, m->wy + my, mw - (2*c->bw) - m->gappx, h - (2*c->bw), 0);
-			if (my + HEIGHT(c) + m->gappx < m->wh)
-				my += HEIGHT(c) + m->gappx;
+			rem = MIN(n, m->nmaster) - i;
+			h = (m->wh - my - m->gappx * (rem - 1)) / rem;
+			resize(c, m->wx, m->wy + my, mw - (2 * c->bw) - (n > m->nmaster ? m->gappx : 0),
+			       h - (2 * c->bw), 0);
+			my += HEIGHT(c) + m->gappx;
 		} else {
-			h = (m->wh - ty) / (n - i) - m->gappx;
-			resize(c, m->wx + mw + m->gappx, m->wy + ty, m->ww - mw - (2*c->bw) - 2*m->gappx, h - (2*c->bw), 0);
-			if (ty + HEIGHT(c) + m->gappx < m->wh)
-				ty += HEIGHT(c) + m->gappx;
+			rem = n - i;
+			h = (m->wh - ty - m->gappx * (rem - 1)) / rem;
+			resize(c, m->wx + mw + m->gappx, m->wy + ty,
+			       m->ww - mw - m->gappx - (2 * c->bw), h - (2 * c->bw), 0);
+			ty += HEIGHT(c) + m->gappx;
 		}
 }
 
@@ -2910,7 +2916,7 @@ tile(Monitor *m)
 void
 bstack(Monitor *m)
 {
-	unsigned int i, n;
+	unsigned int i, n, rem;
 	int w, h, mh, mx, tx, ty, tw;
 	Client *c;
 
@@ -2920,25 +2926,25 @@ bstack(Monitor *m)
 
 	if (n > m->nmaster) {
 		mh = m->nmaster ? m->wh * m->mfact : 0;
-		tw = (m->ww - m->gappx) / (n - m->nmaster) - m->gappx;
-		/* 主区底边在 wy+mh；再空 gappx，与 tile 主/栈间隙一致 */
+		rem = n - m->nmaster;
+		tw = (m->ww - m->gappx * (rem - 1)) / rem;
 		ty = m->wy + mh + m->gappx;
 	} else {
-		mh = m->wh - m->gappx;
-		tw = m->ww - 2 * m->gappx;
+		mh = m->wh;
+		tw = m->ww;
 		ty = m->wy + m->gappx;
 	}
-	for (i = 0, mx = m->gappx, tx = m->wx + m->gappx, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++) {
+	for (i = 0, mx = 0, tx = m->wx, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++) {
 		if (i < m->nmaster) {
-			w = (m->ww - mx) / (MIN(n, m->nmaster) - i) - m->gappx;
-			resize(c, m->wx + mx, m->wy + m->gappx, w - (2 * c->bw), mh - (2 * c->bw) - m->gappx, 0);
-			if (mx + WIDTH(c) + m->gappx < m->ww)
-				mx += WIDTH(c) + m->gappx;
+			rem = MIN(n, m->nmaster) - i;
+			w = (m->ww - mx - m->gappx * (rem - 1)) / rem;
+			resize(c, m->wx + mx, m->wy + m->gappx, w - (2 * c->bw),
+			       (n > m->nmaster ? mh - m->gappx : m->wh - m->gappx) - (2 * c->bw), 0);
+			mx += WIDTH(c) + m->gappx;
 		} else {
-			h = m->wh - mh - 2 * m->gappx;
+			h = m->wh - mh - m->gappx;
 			resize(c, tx, ty, tw - (2 * c->bw), h - (2 * c->bw), 0);
-			if (tw + m->gappx != m->ww)
-				tx += WIDTH(c) + m->gappx;
+			tx += WIDTH(c) + m->gappx;
 		}
 	}
 }
@@ -2946,7 +2952,7 @@ bstack(Monitor *m)
 void
 bstackhoriz(Monitor *m)
 {
-	unsigned int i, n;
+	unsigned int i, n, rem;
 	int w, mh, mx, tx, ty, th;
 	Client *c;
 
@@ -2956,23 +2962,24 @@ bstackhoriz(Monitor *m)
 
 	if (n > m->nmaster) {
 		mh = m->nmaster ? m->wh * m->mfact : 0;
-		/* 主/栈之间 + 底边各留 gappx */
-		th = (m->wh - mh - 2 * m->gappx) / (n - m->nmaster) - m->gappx;
+		rem = n - m->nmaster;
+		/* 主栈缝 gappx；底贴边；栈内窗间 gappx */
+		th = (m->wh - mh - m->gappx - m->gappx * (rem - 1)) / rem;
 		ty = m->wy + mh + m->gappx;
 	} else {
-		th = mh = m->wh - m->gappx;
+		th = mh = m->wh;
 		ty = m->wy + m->gappx;
 	}
-	for (i = 0, mx = m->gappx, tx = m->wx + m->gappx, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++) {
+	for (i = 0, mx = 0, tx = m->wx, c = nexttiled(m->clients); c; c = nexttiled(c->next), i++) {
 		if (i < m->nmaster) {
-			w = (m->ww - mx) / (MIN(n, m->nmaster) - i) - m->gappx;
-			resize(c, m->wx + mx, m->wy + m->gappx, w - (2 * c->bw), mh - (2 * c->bw) - m->gappx, 0);
-			if (mx + WIDTH(c) + m->gappx < m->ww)
-				mx += WIDTH(c) + m->gappx;
+			rem = MIN(n, m->nmaster) - i;
+			w = (m->ww - mx - m->gappx * (rem - 1)) / rem;
+			resize(c, m->wx + mx, m->wy + m->gappx, w - (2 * c->bw),
+			       (n > m->nmaster ? mh - m->gappx : m->wh - m->gappx) - (2 * c->bw), 0);
+			mx += WIDTH(c) + m->gappx;
 		} else {
-			resize(c, tx, ty, m->ww - (2 * c->bw) - 2 * m->gappx, th - (2 * c->bw), 0);
-			if (th + m->gappx != m->wh)
-				ty += HEIGHT(c) + m->gappx;
+			resize(c, tx, ty, m->ww - (2 * c->bw), th - (2 * c->bw), 0);
+			ty += HEIGHT(c) + m->gappx;
 		}
 	}
 }
