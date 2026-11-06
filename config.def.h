@@ -63,6 +63,8 @@ static const Rule rules[] = {
 	{ "St",      NULL,     NULL,           0,         0,          1,           0,        -1 },
 	{ "Rofi",    NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -normal-window：吃 CDE dec */
 	{ "dmenu",   NULL,     NULL,           0,         1,          0,           1,        -1 }, /* -wm：吃 CDE dec */
+	/* wechat.desktop + wechat_secend.desktop：均为 class=wechat → BackSpace 隐藏平铺、最右屏 */
+	{ "wechat",  NULL,     NULL,           HIDDENTAG, 0,          0,           1,        -2 },
 	{ NULL,      NULL,     "Event Tester", 0,         0,          0,           1,        -1 }, /* xev */
 };
 

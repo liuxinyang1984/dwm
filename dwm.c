@@ -395,7 +395,6 @@ applyrules(Client *c)
 	const char *class, *instance;
 	unsigned int i;
 	const Rule *r;
-	Monitor *m;
 	XClassHint ch = { NULL, NULL };
 
 	/* rule matching */
@@ -415,9 +414,9 @@ applyrules(Client *c)
 			c->noswallow  = r->noswallow;
 			c->isfloating = r->isfloating;
 			c->tags |= r->tags;
-			for (m = mons; m && m->num != r->monitor; m = m->next);
-			if (m)
-				c->mon = m;
+			/* -1：不改屏；>=0：Monitor.num；-2：最右（与 hiddentagmon 一致） */
+			if (r->monitor != -1)
+				c->mon = monbyspec(r->monitor);
 		}
 	}
 	if (ch.res_class)
