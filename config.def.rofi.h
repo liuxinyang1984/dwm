@@ -135,6 +135,10 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_r,      spawn,          {.v = rofiruncmd } }, /* rofi run：PATH 命令 */
 	{ MODKEY,                       XK_v,      spawn,          {.v = clipmenucmd } }, /* 剪贴板历史 */
 	{ MODKEY|ControlMask,           XK_l,      spawn,          {.v = slockcmd } }, /* 锁屏 */
+	/* 截图：对齐 Hypr Super(+Alt)(+Shift)+P；X11 用 scrot（grim 仅 Wayland） */
+	{ MODKEY,                       XK_p,      spawn,          SHCMD("mkdir -p \"${HOME}/Pictures/Screenshots\" && scrot \"${HOME}/Pictures/Screenshots/Screenshot_$(date +%Y-%m-%d-%H-%M-%S).png\" -e 'xclip -selection clipboard -t image/png -i $f; notify-send -u low Screenshot $f'") },
+	{ MODKEY|Mod1Mask,              XK_p,      spawn,          SHCMD("mkdir -p \"${HOME}/Pictures/Screenshots\" && scrot -u \"${HOME}/Pictures/Screenshots/Screenshot_$(date +%Y-%m-%d-%H-%M-%S).png\" -e 'xclip -selection clipboard -t image/png -i $f; notify-send -u low Screenshot $f'") },
+	{ MODKEY|ShiftMask|Mod1Mask,    XK_p,      spawn,          SHCMD("mkdir -p \"${HOME}/Pictures/Screenshots\" && scrot -s \"${HOME}/Pictures/Screenshots/Screenshot_$(date +%Y-%m-%d-%H-%M-%S).png\" -e 'xclip -selection clipboard -t image/png -i $f; notify-send -u low Screenshot $f'") },
 	{ MODKEY,                       XK_Return, spawn,          {.v = termcmd } },
 	/* \ / `：浮动终端 dock；BackSpace：隐藏可平铺 tag（栏上不显示） */
 	{ MODKEY,                       XK_grave,      togglefloatdock,   {0} },
