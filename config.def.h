@@ -101,14 +101,14 @@ static const char *rofiruncmd[] = { "rofi-run", NULL };
 static const Key keys[] = {
 	/* modifier                     key        function        argument */
 	/* 多媒体键（各笔记本通用；Mac 在 fnmode=2 时需按 Fn） */
-	{ 0, XF86XK_AudioMute,          spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") },
-	{ 0, XF86XK_AudioLowerVolume,   spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
-	{ 0, XF86XK_AudioRaiseVolume,   spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
-	{ 0, XF86XK_MonBrightnessDown,  spawn, SHCMD("brightnessctl set 5%-") },
-	{ 0, XF86XK_MonBrightnessUp,    spawn, SHCMD("brightnessctl set 5%+") },
+	{ 0, XF86XK_AudioMute,          spawn, SHCMD("vol mute") },
+	{ 0, XF86XK_AudioLowerVolume,   spawn, SHCMD("vol down") },
+	{ 0, XF86XK_AudioRaiseVolume,   spawn, SHCMD("vol up") },
+	{ 0, XF86XK_MonBrightnessDown,  spawn, SHCMD("bright down") },
+	{ 0, XF86XK_MonBrightnessUp,    spawn, SHCMD("bright up") },
 	/* Apple 键盘背光（机型相关；需要时取消注释并重编 dwm）
-	{ 0, XF86XK_KbdBrightnessDown,  spawn, SHCMD("brightnessctl -d smc::kbd_backlight set 5%-") },
-	{ 0, XF86XK_KbdBrightnessUp,    spawn, SHCMD("brightnessctl -d smc::kbd_backlight set 5%+") },
+	{ 0, XF86XK_KbdBrightnessDown,  spawn, SHCMD("kbdbl down") },
+	{ 0, XF86XK_KbdBrightnessUp,    spawn, SHCMD("kbdbl up") },
 	*/
 	{ MODKEY,                       XK_space,  spawn,          {.v = roficmd } },    /* rofi drun：.desktop */
 	{ MODKEY,                       XK_r,      spawn,          {.v = rofiruncmd } }, /* rofi run：PATH 命令 */
