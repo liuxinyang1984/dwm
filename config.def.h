@@ -108,8 +108,8 @@ static const int floatdockmon = -1; /* Super+\ → 左屏 */
 static const int hiddentagmon = -2; /* Super+BackSpace → 右屏 */
 static const char *xkillcmd[] = { "xkill", NULL };
 static const char *slockcmd[] = { "slock", NULL };
-/* 剪贴板历史：对齐本机 Hypr Super+V（cliphist+wofi）→ X11 clipmenu+dmenu */
-static const char *clipmenucmd[] = { "dmenu-clip", NULL };
+/* 剪贴板历史：对齐本机 Hypr Super+V → X11 clipmenud + rofi-clip（列表截断） */
+static const char *clipmenucmd[] = { "rofi-clip", NULL };
 /* rofi：./install.sh x11:rofi → rofi-drun（.desktop）/ rofi-run（PATH 命令） */
 static const char *roficmd[] = { "rofi-drun", NULL };
 static const char *rofiruncmd[] = { "rofi-run", NULL };
@@ -131,7 +131,7 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_space,  spawn,          {.v = roficmd } },    /* rofi drun：.desktop */
 	{ MODKEY,                       XK_r,      spawn,          {.v = rofiruncmd } }, /* rofi run：PATH 命令 */
 	{ MODKEY,                       XK_v,      spawn,          {.v = clipmenucmd } }, /* 剪贴板历史 */
-	{ MODKEY|ControlMask,           XK_l,      spawn,          {.v = slockcmd } }, /* 锁屏 */
+	{ ControlMask|Mod1Mask,         XK_l,      spawn,          {.v = slockcmd } }, /* 锁屏：固定 Ctrl+Alt+l */
 	/* 截图：对齐 Hypr Super(+Alt)(+Shift)+P；scrot+剪贴板+swappy 预览 */
 	{ MODKEY,                       XK_p,      spawn,          SHCMD("screenshot-x11 --now") },
 	{ MODKEY|Mod1Mask,              XK_p,      spawn,          SHCMD("screenshot-x11 --win") },
@@ -150,6 +150,8 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_k,      focusstack,     {.i = -1 } },
 	{ MODKEY,                       XK_h,      focusmaster,    {0} }, /* 焦点 → 主区（记原窗） */
 	{ MODKEY,                       XK_l,      focusslave,     {0} }, /* 焦点 → 副区（记原窗） */
+	{ MODKEY|ControlMask,           XK_h,      shiftviewclients, {.i = -1 } }, /* tag 轮循（跳空） */
+	{ MODKEY|ControlMask,           XK_l,      shiftviewclients, {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_j,      movestack,      {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_k,      movestack,      {.i = -1 } },
 	{ MODKEY|ShiftMask,             XK_h,      zoom,           {0} }, /* 设为主/切换 */
@@ -161,7 +163,8 @@ static const Key keys[] = {
 	{ Mod4Mask|Mod1Mask,            XK_l,      setmfact,       {.f = +0.05} },
 	{ MODKEY|ShiftMask,             XK_Return, zoom,           {0} }, /* 设为主窗口 */
 	{ MODKEY|ControlMask,           XK_Return, cyclelayout,    {0} }, /* tile/===/TTT 循环 */
-	{ MODKEY,                       XK_Tab,    view,           {0} },
+	{ MODKEY,                       XK_Tab,    focusmon,       {.i = +1 } }, /* 屏轮循 */
+	{ MODKEY,                       XK_Escape, view,           {0} }, /* 上一个 tag 集 */
 	{ MODKEY,                       XK_q,      killclient,     {0} },
 	{ MODKEY|ShiftMask,             XK_q,      spawn,          {.v = xkillcmd } },
 	{ MODKEY,                       XK_t,      togglefloating, {0} },

@@ -269,6 +269,7 @@ static void setlayout(const Arg *arg);
 static void setmfact(const Arg *arg);
 static void setup(void);
 static void seturgent(Client *c, int urg);
+static void shiftviewclients(const Arg *arg);
 static void showhide(Client *c);
 static void sighup(int unused);
 static void sigterm(int unused);
@@ -2763,6 +2764,33 @@ seturgent(Client *c, int urg)
 	wmh->flags = urg ? (wmh->flags | XUrgencyHint) : (wmh->flags & ~XUrgencyHint);
 	XSetWMHints(dpy, c->win, wmh);
 	XFree(wmh);
+}
+
+/* 循环 view，跳过当前监视器上无 client 的普通 tag（不含 dock/hidden） */
+void
+shiftviewclients(const Arg *arg)
+{
+	Arg shifted;
+	Client *c;
+	unsigned int tagmask = 0;
+
+	for (c = selmon->clients; c; c = c->next)
+		tagmask |= c->tags & TAGMASK;
+
+	shifted.ui = selmon->tagset[selmon->seltags] & TAGMASK;
+	if (arg->i > 0) /* left circular shift */
+		do {
+			shifted.ui = (shifted.ui << arg->i)
+				| (shifted.ui >> (LENGTH(tags) - arg->i));
+			shifted.ui &= TAGMASK;
+		} while (tagmask && !(shifted.ui & tagmask));
+	else /* right circular shift */
+		do {
+			shifted.ui = (shifted.ui >> (-arg->i))
+				| (shifted.ui << (LENGTH(tags) + arg->i));
+			shifted.ui &= TAGMASK;
+		} while (tagmask && !(shifted.ui & tagmask));
+	view(&shifted);
 }
 
 void
