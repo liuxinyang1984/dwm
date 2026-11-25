@@ -288,6 +288,7 @@ static Monitor *monbyspec(int spec);
 static void relocatemon(Client *c, Monitor *m);
 static void relocatealltag(unsigned int tag, Monitor *m);
 static Client *clientwithtag(unsigned int tag);
+static void placefloatdock(Client *c);
 static void togglefloatdock(const Arg *arg);
 static void tagfloatdock(const Arg *arg);
 static void tagfloatdockfollow(const Arg *arg);
@@ -2041,8 +2042,6 @@ manage(Window w, XWindowAttributes *wa)
 		c->tags = FLOATDOCKBIT;
 		dm->tagset[dm->seltags] |= FLOATDOCKBIT;
 		c->isfloating = True;
-		c->x = dm->wx + (dm->ww / 2 - WIDTH(c) / 2);
-		c->y = dm->wy + (dm->wh / 2 - HEIGHT(c) / 2);
 	}
 
 	wc.border_width = 0;
@@ -2051,8 +2050,12 @@ manage(Window w, XWindowAttributes *wa)
 	updatewindowtype(c);
 	updatesizehints(c);
 	updatewmhints(c);
-	c->x = c->mon->mx + (c->mon->mw - WIDTH(c)) / 2;
-	c->y = c->mon->my + (c->mon->mh - HEIGHT(c)) / 2;
+	if (!strcmp(c->name, floatdockname))
+		placefloatdock(c);
+	else {
+		c->x = c->mon->mx + (c->mon->mw - WIDTH(c)) / 2;
+		c->y = c->mon->my + (c->mon->mh - HEIGHT(c)) / 2;
+	}
 	XSelectInput(dpy, w, EnterWindowMask|FocusChangeMask|PropertyChangeMask|StructureNotifyMask);
 	grabbuttons(c, 0);
 	if (!c->isfloating)
@@ -3168,6 +3171,26 @@ clientwithtag(unsigned int tag)
 	return NULL;
 }
 
+/* Super+\ dock：按钉屏可用区（去 bar）比例居中 */
+void
+placefloatdock(Client *c)
+{
+	Monitor *dm;
+	int tw, th;
+
+	if (!c)
+		return;
+	dm = c->mon ? c->mon : monbyspec(floatdockmon);
+	if (!dm)
+		return;
+	tw = (int)(dm->ww * floatdockfact) - 2 * c->bw;
+	th = (int)(dm->wh * floatdockfact) - 2 * c->bw;
+	c->w = MAX(1, tw);
+	c->h = MAX(1, th);
+	c->x = dm->wx + (dm->ww - WIDTH(c)) / 2;
+	c->y = dm->wy + (dm->wh - HEIGHT(c)) / 2;
+}
+
 /* Super+\：单实例浮动终端抽屉（钉左屏） */
 void
 togglefloatdock(const Arg *arg)
@@ -3183,9 +3206,11 @@ togglefloatdock(const Arg *arg)
 		relocatealltag(FLOATDOCKBIT, m);
 		for (mm = mons; mm; mm = mm->next)
 			mm->tagset[mm->seltags] &= ~FLOATDOCKBIT;
-		if (show)
+		if (show) {
 			m->tagset[m->seltags] |= FLOATDOCKBIT;
-		else if (!(m->tagset[m->seltags] & (TAGMASK | HIDDENTAG)))
+			placefloatdock(c);
+			resizeclient(c, c->x, c->y, c->w, c->h);
+		} else if (!(m->tagset[m->seltags] & (TAGMASK | HIDDENTAG)))
 			m->tagset[m->seltags] = 1;
 		unfocus(selmon->sel, 0);
 		selmon = m;

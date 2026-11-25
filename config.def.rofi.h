@@ -105,7 +105,8 @@ static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-c", "-l", "5", 
 static const char *termcmd[]  = { "st", NULL };
 /* Super+\：单实例浮动终端 dock（标题须与 floatdockname 一致） */
 static const char floatdockname[] = "backslash";
-static const char *floatdockcmd[] = { "st", "-t", "backslash", "-g", "140x40", NULL };
+static const char *floatdockcmd[] = { "st", "-t", "backslash", NULL }; /* 尺寸由 dwm 按可用区比例算 */
+static const float floatdockfact = 0.80; /* 相对钉屏 wx/wy/ww/wh（已去 bar） */
 /* 钉屏：-1 最左（mx 最小），-2 最右；>=0 为 Monitor.num */
 static const int floatdockmon = -1; /* Super+\ → 左屏 */
 static const int hiddentagmon = -2; /* Super+BackSpace → 右屏 */
