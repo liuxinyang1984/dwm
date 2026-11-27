@@ -949,8 +949,12 @@ drawdec(Client *c, int focused)
 	if (w_c < 0)
 		w_c = 0;
 
-	/* FVWM: corner_width = title_thickness + boundary；此处 = handlewidth */
-	cx = cy = (int)handlewidth;
+	/*
+	 * FVWM: corner_width = title_thickness + boundary_width。
+	 * 无标题栏：title_equiv = titleratio * bw（CDE 20/5=4），
+	 * corner = title_equiv + bw = (titleratio + 1) * bw。
+	 */
+	cx = cy = (int)(titleratio + 1) * bw;
 	if (cx < bw)
 		cx = bw;
 	if (cy < bw)

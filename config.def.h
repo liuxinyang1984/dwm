@@ -3,8 +3,11 @@
 /* appearance */
 static const unsigned int borderpx  = 5;        /* border pixel of windows */
 static const unsigned int barborderpx = 5;      /* outer CDE frame around barwin (0 = off) */
-/* 角宽（沿边）= FVWM corner_width ≈ TitleHeight + BorderWidth（20+5） */
-static const unsigned int handlewidth = 25;
+/*
+ * 虚拟标题厚 / 边厚（CDE：TitleHeight/BorderWidth = 20/5 = 4）。
+ * 角长 = title_equiv + bw = (titleratio + 1) * borderpx。
+ */
+static const unsigned int titleratio = 4;
 static const unsigned int gappx     = 5;        /* 窗间缝 + 栏下缝；CDE：左右/底贴边 */
 static const unsigned int snap      = 32;       /* snap pixel */
 static const unsigned int systraypinning = 0;   /* 0: sloppy systray follows selected monitor, >0: pin systray to monitor X */
