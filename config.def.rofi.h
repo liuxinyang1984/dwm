@@ -20,10 +20,10 @@ static const int showsystray        = 1;        /* 0 means no systray */
 static const int swallowfloating    = 0;        /* 1 means swallow floating windows by default */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
-/* 0 = 跟字体；>0 固定栏高(px)。与 st / dmenu 统一 size=14 */
+/* 0 = 跟字体；>0 固定栏高(px)。走 fontconfig monospace（当前默认 SunSong） */
 static const unsigned int barheight = 0;
-static const char *fonts[]          = { "Maple Mono NL NF:size=14" };
-static const char dmenufont[]       = "Maple Mono NL NF:size=14";
+static const char *fonts[]          = { "monospace:size=14" };
+static const char dmenufont[]       = "monospace:size=14";
 /* Gruvbox Dark — 与 st / neovim 对齐 */
 static const char col_gray1[]       = "#282828"; /* bg */
 static const char col_gray2[]       = "#3c3836"; /* border norm */
